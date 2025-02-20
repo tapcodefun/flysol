@@ -63,6 +63,7 @@
 </template>
 
 <script setup lang="ts">
+import { isMacOS,isWindows,OpenURL,loadEnvironment } from './utils/platform';
 import { ref, reactive, onMounted } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElMessageBox, install } from 'element-plus'
@@ -357,49 +358,57 @@ const handleInstall = (host: Host) => {
   if(host.status == 'offline'){
     return ElMessage.error('服务器未启动');
   }
-  // 打开新窗口
-  const windowFeatures = 'width=800,height=600,resizable=yes,scrollbars=yes';
-  const newWindow = window.open('http://'+host.ip+':5189/install?model=', '', windowFeatures);
 
-  if (newWindow) {
-    // 设置新窗口的标题
-    newWindow.document.title = `连接主机 - ${host.name}`;
-    
-    // 添加加载中的提示
-    newWindow.document.body.innerHTML = `
-      <div style="display: flex; justify-content: center; align-items: center; height: 100vh;">
-        <h2>正在连接到 ${host.ip}:${host.port}...</h2>
-      </div>
-    `;
-  } else {
-    ElMessage.error('无法打开新窗口，请检查浏览器设置');
+  if (isMacOS() == true) {
+    OpenURL('http://'+host.ip+':5189/install?model=');
+  }else if (isWindows() == true) {
+    const windowFeatures = 'width=800,height=600,resizable=yes,scrollbars=yes';
+    const newWindow = window.open('http://'+host.ip+':5189/install?model=', '', windowFeatures);
+
+    if (newWindow) {
+      // 设置新窗口的标题
+      newWindow.document.title = `连接主机 - ${host.name}`;
+      
+      // 添加加载中的提示
+      newWindow.document.body.innerHTML = `
+        <div style="display: flex; justify-content: center; align-items: center; height: 100vh;">
+          <h2>正在连接到 ${host.ip}:${host.port}...</h2>
+        </div>
+      `;
+    } else {
+      ElMessage.error('无法打开新窗口，请检查浏览器设置');
+    }
   }
 }
 const handleConnect = (host: Host) => {
   if(host.status == 'offline'){
     return ElMessage.error('服务器未启动');
   }
-  // 打开新窗口
-  const windowFeatures = 'width=800,height=600,resizable=yes,scrollbars=yes';
-  const newWindow = window.open('http://'+host.ip+':5189?model=run', '', windowFeatures);
+  if (isMacOS() == true) {
+    OpenURL('http://'+host.ip+':5189/install?model=');
+  }else if (isWindows() == true) {
+    // 打开新窗口
+    const windowFeatures = 'width=800,height=600,resizable=yes,scrollbars=yes';
+    const newWindow = window.open('http://'+host.ip+':5189?model=run', '', windowFeatures);
 
-  if (newWindow) {
-    // 设置新窗口的标题
-    newWindow.document.title = `连接主机 - ${host.name}`;
-    
-    // 添加加载中的提示
-    newWindow.document.body.innerHTML = `
-      <div style="display: flex; justify-content: center; align-items: center; height: 100vh;">
-        <h2>正在连接到 ${host.ip}:${host.port}...</h2>
-      </div>
-    `;
+    if (newWindow) {
+      // 设置新窗口的标题
+      newWindow.document.title = `连接主机 - ${host.name}`;
+      
+      // 添加加载中的提示
+      newWindow.document.body.innerHTML = `
+        <div style="display: flex; justify-content: center; align-items: center; height: 100vh;">
+          <h2>正在连接到 ${host.ip}:${host.port}...</h2>
+        </div>
+      `;
 
-    // 预留后续逻辑
-    // 这里可以添加 WebSocket 连接、终端初始化等逻辑
-    // 例如：
-    // initTerminal(newWindow, host);
-  } else {
-    ElMessage.error('无法打开新窗口，请检查浏览器设置');
+      // 预留后续逻辑
+      // 这里可以添加 WebSocket 连接、终端初始化等逻辑
+      // 例如：
+      // initTerminal(newWindow, host);
+    } else {
+      ElMessage.error('无法打开新窗口，请检查浏览器设置');
+    }
   }
 }
 
@@ -465,7 +474,8 @@ const submitForm = async () => {
   }
 };
 
-onMounted(() => {
+onMounted(async() => {
+  await loadEnvironment()
   loadHostList()
 })
 </script>

@@ -2,14 +2,25 @@ package main
 
 import (
 	"embed"
+	"fmt"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+
+	"github.com/wailsapp/wails/v2/pkg/options/mac"
+	"github.com/wailsapp/wails/v2/pkg/options/windows"
 )
 
 //go:embed all:frontend/dist
 var assets embed.FS
+
+//go:embed build/appicon.png
+var icon []byte
+
+var version = "0.0.1"
+
+const appName = "Next Solana"
 
 func main() {
 	// Create an instance of the app structure
@@ -27,6 +38,21 @@ func main() {
 		OnStartup:        app.startup,
 		Bind: []interface{}{
 			app,
+		},
+		Mac: &mac.Options{
+			TitleBar: mac.TitleBarHiddenInset(),
+			About: &mac.AboutInfo{
+				Title:   fmt.Sprintf("%s %s", appName, version),
+				Message: "A modern lightweight cross-platform Redis desktop client.\n\nCopyright © 2024",
+				Icon:    icon,
+			},
+			WebviewIsTransparent: false,
+			WindowIsTranslucent:  false,
+		},
+		Windows: &windows.Options{
+			WebviewIsTransparent:              false,
+			WindowIsTranslucent:               false,
+			DisableFramelessWindowDecorations: false,
 		},
 	})
 
