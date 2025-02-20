@@ -2,17 +2,18 @@
   <div class="host-management">
     <div class="operation-bar">
       <el-button type="primary" @click="handleAdd">添加主机</el-button>
-      <el-button type="primary" @click="handleCheck">检查连接</el-button>
+      <el-button type="success" @click="loadHostList">刷新主机</el-button>
     </div>
 
     <el-table :data="hostList" border style="width: 100%">
       <el-table-column prop="name" label="主机名称" width="180" />
       <el-table-column prop="ip" label="IP地址" width="150" />
       <el-table-column prop="version" label="版本" width="100" />
+      <el-table-column prop="cpu" label="CPU" width="100" />
       <el-table-column prop="status" label="状态" width="100">
         <template #default="{ row }">
           <el-button size="small" type="success" v-if="row.status==='online'" @click="handleClose(row)">在线</el-button>
-          <el-button size="small" type="success" v-if="row.status==='offline'" @click="handleStart(row)">离线</el-button>
+          <el-button size="small" type="danger" v-if="row.status==='offline'" @click="handleStart(row)">离线</el-button>
         </template>
       </el-table-column>
       <el-table-column prop="desc" label="描述" />
@@ -20,7 +21,7 @@
         <template #default="{ row }">
           <el-button size="small" @click="handleEdit(row)">编辑</el-button>
           <el-button size="small" type="danger" @click="handleDelete(row.id)">删除</el-button>
-          <el-button size="small" type="success" @click="handleInstall(row)">配置</el-button>
+          <el-button size="small" type="primary" @click="handleInstall(row)">配置</el-button>
           <el-button size="small" type="success" @click="handleConnect(row)">连接</el-button>
         </template>
       </el-table-column>
@@ -28,24 +29,47 @@
 
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑主机' : '添加主机'" width="600px" top="10vh">
       <el-form ref="formRef" :model="formData" :rules="formRules" label-width="80px">
-        <el-form-item label="主机名称" prop="name">
-          <el-input v-model="formData.name" />
-        </el-form-item>
-        <el-form-item label="IP地址" prop="ip">
-          <el-input v-model="formData.ip" />
-        </el-form-item>
-        <el-form-item label="端口" prop="port">
-          <el-input v-model.number="formData.port" />
-        </el-form-item>
-        <el-form-item label="用户名" prop="username">
-          <el-input v-model="formData.username" />
-        </el-form-item>
-        <el-form-item label="密码" prop="password" v-if="formData.install == 'wait' || formData.install == 'doing'" >
-          <el-input v-model="formData.password" type="password" show-password />
-        </el-form-item>
-        <el-form-item label="描述" prop="desc">
-          <el-input v-model="formData.desc" />
-        </el-form-item>
+        <el-row :gutter="20">
+          <el-col :span="24">
+            <el-form-item label="主机名称" prop="name">
+              <el-input v-model="formData.name" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="IP地址" prop="ip">
+              <el-input v-model="formData.ip" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="用户名" prop="username">
+              <el-input v-model="formData.username" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12" v-if="formData.install == 'wait' || formData.install == 'doing'">
+            <el-form-item label="密码" prop="password" >
+              <el-input v-model="formData.password" type="password" show-password />
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="描述" prop="desc">
+              <el-input v-model="formData.desc" />
+            </el-form-item>
+          </el-col>
+          
+          <el-col :span="24">
+            <el-form-item label="IP" prop="ips">
+              <div style="margin-top: 5px;" v-for="(item,index) in formData.ips"> 
+                <el-input v-model="item.ip" style="float: left;width: 160px;margin-right: 5px;" /> 
+                <el-input v-model="item.iface" style="float: left;width: 80px;margin-right: 5px;" />
+              </div>
+              <div style="margin-top: 5px;"> 
+                <el-input v-model="newip.ip" style="float: left;width: 160px;margin-right: 5px;" /> 
+                <el-input v-model="newip.iface" style="float: left;width: 80px;margin-right: 5px;" /> 
+                <el-button type="info" style="float: left;width: 60px;" @click="addIP(formData.ip,formData.password||'')">增加</el-button>
+              </div>
+            </el-form-item>
+          </el-col>
+        </el-row>
       </el-form>
       <template #footer>
         <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -67,8 +91,12 @@ import { isMacOS,isWindows,OpenURL,loadEnvironment } from './utils/platform';
 import { ref, reactive, onMounted } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElMessageBox, install } from 'element-plus'
-import {Install,RunServer,CloseServer,CheckPort} from '../wailsjs/go/main/App'
+import {Install,RunServer,CloseServer,CheckPort,AddServerIP} from '../wailsjs/go/main/App'
 
+interface ipface {
+  ip: string
+  iface: string
+}
 interface Host {
   id?: number
   name: string
@@ -78,9 +106,11 @@ interface Host {
   version: string
   password?: string
   desc: string
-  ips: string
+  ips: ipface[]
   rpc: string
   grpc: string
+  cpu: string
+  token: string
   status: 'online' | 'offline'
   install: 'doing' | 'finish' | 'wait'
 }
@@ -91,18 +121,22 @@ const dialogVisible = ref(false)
 const isEdit = ref(false)
 const currentEditId = ref<number>(0)
 
+const newip = ref<ipface>({iface:'',ip:''})
+
 const formData = reactive<Omit<Host, 'id' | 'status'>>({
   name: '',
   ip: '',
   port: 22,
   username: 'root',
   password: '',
-  version:"1.0.4",
+  version: "1.0.4",
   desc: '',
-  ips:'',
+  ips: [],
   rpc: '',
-  grpc:"",
-  install:"wait",
+  token:'',
+  grpc: "",
+  cpu: "",
+  install: "wait",
 })
 
 const formRules = reactive<FormRules>({
@@ -170,68 +204,35 @@ const deleteHost = async (id: number): Promise<void> => {
     request.onerror = () => reject(request.error)
   })
 }
-
 const loadHostList = async () => {
   try {
     const hosts = await getAllHosts();
-    // 确保每个主机的 status 字段都有一个默认值 'offline'
-    hostList.value = hosts.map(host => ({
-      ...host,
-      status: 'offline', // 如果 status 不存在，则设置为 'offline'
-      install: host.install, // 如果 install 不存在，则设置为 'wait'
-    }));
-  } catch (error) {
-    console.error('加载数据失败:', error);
-    ElMessage.error('数据加载失败');
-  }
-};
-
-const getHostStatus = async (host:string) => {
-  try {
-    const response = await fetch("http://"+host+":5189/metrics", {
-      method: 'GET', // 指定请求方法为 POST
-      headers: {
-        'Content-Type': 'application/json', // 设置请求头，指定发送的数据格式为 JSON
-      },
-    });
-    if (response.ok) {
-      const content = await response.json();
-      console.log(content)
-    } else {
-      console.error('Failed to save config:', response.statusText);
-    }
-  } catch (error) {
-    console.error('Error saving config:', error);
-  }
-  return 'offline';
-} 
-const handleCheck = async () => {
-  try {
-    const hosts = await getAllHosts();
-
-    // 使用 Promise.all 来并发请求每个主机的状态
-    const updatedHosts = await Promise.all(
-      hosts.map(async (host) => {
-        try {
-          // 假设 getHostStatus 是一个异步函数，用于获取主机的状态
-          const status = await getHostStatus(host.ip);
-          return {
-            ...host,
-            status: 'offline', // 如果接口返回的状态为空，则设置为 'offline'
-            install: 'finish', // 如果 install 不存在，则设置为 'wait'
-          };
-        } catch (error) {
-          console.error(`获取主机 ${host.id} 状态失败:`, error);
-          return {
-            ...host,
-            status: 'offline', // 如果请求失败，则设置为 'offline'
-            install: 'finish', // 如果 install 不存在，则设置为 'wait'
-          };
+    hosts.forEach(async (host,index) => {
+      try {
+        const response = await fetch(`http://${host.ip}:5189/metrics`, {
+          method: 'GET',
+          headers: {'Content-Type': 'application/json'},
+        });
+        if (response.ok) {
+          const content = await response.json();
+          console.log(content);
+          var ips = content.ips || [];
+          host.status = 'online';
+          host.cpu =  (content.cpu).toFixed(2) + '%';
+          host.ips =  ips;
+          host.token =  content.token;
+          hostList.value[index] = host;
+        } else {
+          host.status = 'offline';
+          host.cpu = "";
+          hostList.value[index] = host;
         }
-      })
-    );
-
-    //hostList.value = updatedHosts;
+      } catch (error) {
+        host.status = 'offline';
+        host.cpu = "";
+        hostList.value[index] = host;
+      }
+    })
   } catch (error) {
     console.error('加载数据失败:', error);
     ElMessage.error('数据加载失败');
@@ -254,6 +255,9 @@ const handleAdd = () => {
 const handleEdit = (row: Host) => {
   isEdit.value = true
   currentEditId.value = row.id!
+  var ip = row.ips[0] || {};
+  newip.value.iface = ip.iface;
+  newip.value.ip = "";
   Object.assign(formData, row)
   dialogVisible.value = true
 }
@@ -314,13 +318,13 @@ const handleClose = async (host: Host) => {
 }
 const handleStart = async (host: Host) => {
   ElMessage.info(`正在连接 ${host.ip}:${host.port}`);
-
+  const index = hostList.value.findIndex(h => h.id === host.id);
   try {
-    RunServer(host.ip, host.password || '');
-
+    var token = generateRandomString(16);
+    RunServer(host.ip, host.password || '', token);
+    hostList.value[index].token = token;
     let timerId: number;
     let timeoutId: number;
-
     const startTimer = () => {
       timerId = window.setInterval(async () => {
         const res = await CheckPort(host.ip, host.password || '');
@@ -328,11 +332,7 @@ const handleStart = async (host: Host) => {
         if (res === 'success') {
           clearInterval(timerId);
           clearTimeout(timeoutId);
-          // 更新主机状态为 'online'
-          const index = hostList.value.findIndex(h => h.id === host.id);
-          if (index !== -1) {
-            hostList.value[index].status = 'online';
-          }
+          hostList.value[index].status = 'online';
           ElMessage.success('启动成功');
         }
       }, 1000); // 每1秒执行一次
@@ -358,13 +358,12 @@ const handleInstall = (host: Host) => {
   if(host.status == 'offline'){
     return ElMessage.error('服务器未启动');
   }
-
+  var url = 'http://'+host.ip+':5189?model=&code='+host.token;;
   if (isMacOS() == true) {
-    OpenURL('http://'+host.ip+':5189/install?model=');
+    OpenURL(url);
   }else if (isWindows() == true) {
     const windowFeatures = 'width=800,height=600,resizable=yes,scrollbars=yes';
-    const newWindow = window.open('http://'+host.ip+':5189/install?model=', '', windowFeatures);
-
+    const newWindow = window.open(url, '', windowFeatures);
     if (newWindow) {
       // 设置新窗口的标题
       newWindow.document.title = `连接主机 - ${host.name}`;
@@ -384,13 +383,12 @@ const handleConnect = (host: Host) => {
   if(host.status == 'offline'){
     return ElMessage.error('服务器未启动');
   }
+  var url = 'http://'+host.ip+':5189?model=run&code='+host.token;
   if (isMacOS() == true) {
-    OpenURL('http://'+host.ip+':5189/install?model=');
+    OpenURL(url);
   }else if (isWindows() == true) {
-    // 打开新窗口
     const windowFeatures = 'width=800,height=600,resizable=yes,scrollbars=yes';
-    const newWindow = window.open('http://'+host.ip+':5189?model=run', '', windowFeatures);
-
+    const newWindow = window.open(url, '', windowFeatures);
     if (newWindow) {
       // 设置新窗口的标题
       newWindow.document.title = `连接主机 - ${host.name}`;
@@ -445,6 +443,16 @@ const handleTestConnection = async () => {
   }
 };
 
+const addIP = async (ip:string, password:string) => {
+  try {
+    AddServerIP(ip,password,newip.value.ip,newip.value.iface).then((res:any) => {
+      console.log(res);
+    });
+  } catch (error) {
+    console.error('操作失败:', error);
+    ElMessage.error('操作失败');
+  }
+};
 const submitForm = async () => {
   if (!formRef.value) return;
 
@@ -473,6 +481,18 @@ const submitForm = async () => {
     ElMessage.error('操作失败');
   }
 };
+
+const generateRandomString = (length: number) => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+~`|}{[]:;?><,./-=';
+    let randomString = '';
+
+    for (let i = 0; i < length; i++) {
+        const randomIndex = Math.floor(Math.random() * chars.length);
+        randomString += chars[randomIndex];
+    }
+
+    return randomString;
+}
 
 onMounted(async() => {
   await loadEnvironment()

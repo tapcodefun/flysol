@@ -87,6 +87,61 @@ func (a *App) Install(sshhost string, sshpassword string) string {
 	return "success"
 }
 
+func (a *App) AddServerIP(sshhost string, sshpassword string, newip string, iface string) string {
+	// SSH 配置
+	config := &ssh.ClientConfig{
+		User: "root",
+		Auth: []ssh.AuthMethod{
+			ssh.Password(sshpassword),
+		},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // 忽略主机密钥检查
+		Timeout:         30 * time.Second,            // 连接超时时间
+	}
+
+	// 连接到远程服务器
+	client, err := ssh.Dial("tcp", sshhost+":22", config)
+	if err != nil {
+		return fmt.Sprintf("Failed to dial: %s %s %s", err, sshpassword, sshhost)
+	}
+	defer client.Close()
+
+	// 创建一个新的会话
+	session, err := client.NewSession()
+	if err != nil {
+		return fmt.Sprintf("Failed to create session: %s", err)
+	}
+	defer session.Close()
+
+	// 使用io.Pipe代替标准输入
+	stdinPipe, err := session.StdinPipe()
+	if err != nil {
+		return fmt.Sprintf("Failed to create stdin pipe: %s", err)
+	}
+	defer stdinPipe.Close()
+
+	// 请求一个伪终端
+	modes := ssh.TerminalModes{
+		ssh.ECHO:          0,     // 禁用回显
+		ssh.TTY_OP_ISPEED: 14400, // 输入速度 = 14.4kbaud
+		ssh.TTY_OP_OSPEED: 14400, // 输出速度 = 14.4kbaud
+	}
+
+	if err := session.RequestPty("xterm", 80, 40, modes); err != nil {
+		return fmt.Sprintf("Request for pseudo terminal failed: %s", err)
+	}
+
+	// 启动一个命令并保持会话
+	cmd := "sudo ip addr add " + newip + "/24 dev " + iface
+	fmt.Print(cmd)
+	if err := session.Start(cmd); err != nil {
+		return fmt.Sprintf("Failed to start command: %s", err)
+	}
+
+	if err := session.Wait(); err != nil {
+		return fmt.Sprintf("Session failed: %s", err)
+	}
+	return "success"
+}
 func sshSession(sshhost string, sshpassword string) (*ssh.Session, error) {
 	// SSH 配置
 	config := &ssh.ClientConfig{
@@ -229,7 +284,7 @@ func killProcess(client *ssh.Client, pid string) error {
 
 	return nil
 }
-func (a *App) RunServer(sshhost string, sshpassword string) string {
+func (a *App) RunServer(sshhost string, sshpassword string, token string) string {
 	fmt.Printf("RunServer %s %s", sshhost, sshpassword)
 	// SSH 配置
 	config := &ssh.ClientConfig{
@@ -272,7 +327,7 @@ func (a *App) RunServer(sshhost string, sshpassword string) string {
 	}
 
 	// 启动一个命令并保持会话
-	cmd := "export API_TOKEN=nextcoderdev && export SSH_PWD=" + sshpassword + " && cd /home && chmod +x agent && ./agent"
+	cmd := "export API_TOKEN=" + token + " && export SSH_PWD=" + sshpassword + " && cd /home && chmod +x agent && ./agent"
 	fmt.Print(cmd)
 	if err := session.Start(cmd); err != nil {
 		return fmt.Sprintf("Failed to start command: %s", err)
