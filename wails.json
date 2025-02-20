@@ -17,8 +17,8 @@
     "copyright": "Copyright © 2025"
   },
   "build": {
-    "platforms": ["darwin/amd64", "darwin/arm64"], // 支持 macOS (Intel 和 Apple Silicon)
-    "nsisType": "single", // Windows 安装程序配置
+    "platforms": ["darwin/amd64", "darwin/arm64"],
+    "nsisType": "single",
     "mac": {
       "bundleID": "com.nextcoder.solvps",
       "category": "public.app-category.developer-tools"
