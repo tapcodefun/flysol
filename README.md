@@ -17,3 +17,8 @@ to this in your browser, and you can call your Go code from devtools.
 ## Building
 
 To build a redistributable, production mode package, use `wails build`.
+
+```
+wails build -p darwin/amd64  # 针对 Intel Mac
+wails build -p darwin/arm64  # 针对 Apple Silicon Mac
+```
