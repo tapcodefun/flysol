@@ -8,7 +8,7 @@ on:
       tag:
         description: 'Version tag'
         required: true
-        default: '1.0.0'
+        default: '0.0.1'
 
 jobs:
   release:
@@ -17,8 +17,7 @@ jobs:
     strategy:
       matrix:
         platform:
-          - darwin/arm64
-    #          - darwin/universal
+          - darwin/amd64
     steps:
       - name: Checkout source code
         uses: actions/checkout@v3
@@ -46,16 +45,6 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: stable
-
-      #      - name: Install gon for macOS notarisation
-      #        shell: bash
-      #        run: wget https://github.com/mitchellh/gon/releases/download/v0.2.5/gon_macos.zip && unzip gon_macos.zip && mv gon /usr/local/bin
-      #
-      #      - name: Import code signing certificate from Github Secrets
-      #        uses: Apple-Actions/import-codesign-certs@v1
-      #        with:
-      #          p12-file-base64: ${{ secrets.APPLE_DEVELOPER_CERTIFICATE_P12_BASE64 }}
-      #          p12-password: ${{ secrets.APPLE_DEVELOPER_CERTIFICATE_PASSWORD }}
 
       - name: Install wails
         shell: bash
@@ -106,8 +95,6 @@ jobs:
             --icon "solvps.app" 180 180 \
             --hide-extension "solvps.app" \
             --app-drop-link 480 180 \
-            --add-file "Repair" "dmg/fix-app" 230 290 \
-            --add-file "损坏修复" "dmg/fix-app_zh" 430 290 \
             "bin/solvps-${{ steps.normalise_platform.outputs.tag }}.dmg" \
             "bin"
 
