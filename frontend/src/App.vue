@@ -55,7 +55,7 @@
               <el-input v-model="formData.desc" />
             </el-form-item>
           </el-col>
-          <el-col :span="24" v-if="formData.log">
+          <el-col :span="24">
             <el-form-item label="日志" prop="log">
               <el-input type="textarea" row="4" v-model="formData.log" />
             </el-form-item>
