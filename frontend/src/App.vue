@@ -58,10 +58,12 @@
           
           <el-col :span="24">
             <el-form-item label="IP" prop="ips">
+              <template v-if="typeof formData.ips != 'string'">
               <div style="margin-top: 5px;" v-for="(item,index) in formData.ips"> 
                 <el-input v-model="item.ip" style="float: left;width: 160px;margin-right: 5px;" /> 
                 <el-input v-model="item.iface" style="float: left;width: 80px;margin-right: 5px;" />
               </div>
+              </template>
               <div style="margin-top: 5px;"> 
                 <el-input v-model="newip.ip" style="float: left;width: 160px;margin-right: 5px;" /> 
                 <el-input v-model="newip.iface" style="float: left;width: 80px;margin-right: 5px;" /> 
@@ -106,7 +108,7 @@ interface Host {
   version: string
   password?: string
   desc: string
-  ips: ipface[]
+  ips: ipface[] | ""
   rpc: string
   grpc: string
   cpu: string
@@ -131,7 +133,7 @@ const formData = reactive<Omit<Host, 'id' | 'status'>>({
   password: '',
   version: "1.0.4",
   desc: '',
-  ips: [],
+  ips: '',
   rpc: '',
   token:'',
   grpc: "",
@@ -186,6 +188,7 @@ const saveHost = async (host: Host): Promise<void> => {
   return new Promise((resolve, reject) => {
     const transaction = db.transaction('hosts', 'readwrite')
     const store = transaction.objectStore('hosts')
+    host.ips = ""
     const request = host.id ? store.put(host) : store.add(host)
 
     request.onsuccess = () => resolve()
@@ -255,8 +258,16 @@ const handleAdd = () => {
 const handleEdit = (row: Host) => {
   isEdit.value = true
   currentEditId.value = row.id!
-  var ip = row.ips[0] || {};
-  newip.value.iface = ip.iface;
+  if(row.ips.length>0){
+    var ip = row.ips[0];
+    if(typeof ip === 'string'){
+      newip.value.iface = "";
+    }else{
+      newip.value.iface = ip.iface;
+    }
+  }else{
+    newip.value.iface = "";
+  }
   newip.value.ip = "";
   Object.assign(formData, row)
   dialogVisible.value = true
@@ -277,45 +288,41 @@ const handleDelete = async (id: number) => {
     }
   })
 }
+
 const handleClose = async (host: Host) => {
   ElMessage.info(`正在关闭 ${host.ip}:${host.port}`);
-
+  const index = hostList.value.findIndex(h => h.id === host.id);
   try {
     CloseServer(host.ip, host.password || '');
     let timerId: number;
-    let timeoutId: number;
+    let attemptCount = 0; // 添加一个计数器
+
     const startTimer = () => {
       timerId = window.setInterval(async () => {
-        const res = await CheckPort(host.ip, host.password || '');
-        console.log('CloseServer CheckPort',res);
-        if (res === 'false') {
-          clearInterval(timerId);
-          clearTimeout(timeoutId);
-          // 更新主机状态为 'offline'
-          const index = hostList.value.findIndex(h => h.id === host.id);
-          if (index !== -1) {
-            hostList.value[index].status = 'offline';
+        await fetch(`http://${host.ip}:5189/metrics`, {
+          method: 'GET',
+          headers: {'Content-Type': 'application/json'},
+        }).then(res=>{
+          attemptCount++; // 每次查询失败后增加计数器
+          if (attemptCount >= 10) { // 如果达到10次查询
+            clearInterval(timerId);
+            ElMessage.error('关闭失败');
           }
+        }).catch(err=>{
+          clearInterval(timerId);
+          hostList.value[index].status = 'offline';
           ElMessage.success('关闭成功');
-        }
+        })
       }, 1000); // 每1秒执行一次
     };
 
-    const startTimeout = () => {
-      timeoutId = window.setTimeout(() => {
-        clearInterval(timerId);
-        ElMessage.warning('关闭超时，正在重新关闭...');
-        handleClose(host); // 重新关闭
-      }, 10000); // 10秒超时
-    };
-
     startTimer();
-    startTimeout();
   } catch (error) {
     console.error('关闭失败:', error);
     ElMessage.error('关闭失败');
   }
-}
+};
+
 const handleStart = async (host: Host) => {
   ElMessage.info(`正在连接 ${host.ip}:${host.port}`);
   const index = hostList.value.findIndex(h => h.id === host.id);
@@ -324,30 +331,27 @@ const handleStart = async (host: Host) => {
     RunServer(host.ip, host.password || '', token);
     hostList.value[index].token = token;
     let timerId: number;
-    let timeoutId: number;
+    let attemptCount = 0; // 添加一个计数器
+
     const startTimer = () => {
       timerId = window.setInterval(async () => {
         const res = await CheckPort(host.ip, host.password || '');
         console.log(res);
         if (res === 'success') {
           clearInterval(timerId);
-          clearTimeout(timeoutId);
           hostList.value[index].status = 'online';
           ElMessage.success('启动成功');
+        } else {
+          attemptCount++;
+          if (attemptCount >= 10) {
+            clearInterval(timerId);
+            ElMessage.error('启动失败');
+          }
         }
       }, 1000); // 每1秒执行一次
     };
 
-    const startTimeout = () => {
-      timeoutId = window.setTimeout(() => {
-        clearInterval(timerId);
-        ElMessage.warning('启动超时，正在重新连接...');
-        handleStart(host); // 重新连接
-      }, 10000); // 10秒超时
-    };
-
     startTimer();
-    startTimeout();
   } catch (error) {
     console.error('启动失败:', error);
     ElMessage.error('启动失败');
@@ -483,7 +487,7 @@ const submitForm = async () => {
 };
 
 const generateRandomString = (length: number) => {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+~`|}{[]:;?><,./-=';
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
     let randomString = '';
 
     for (let i = 0; i < length; i++) {
