@@ -10,13 +10,14 @@
       <el-table-column prop="ip" label="IP地址" width="150" />
       <el-table-column prop="version" label="版本" width="100" />
       <el-table-column prop="cpu" label="CPU" width="100" />
-      <el-table-column prop="status" label="状态" width="100">
+      <el-table-column prop="status" label="状态" width="130">
         <template #default="{ row }">
           <el-button size="small" type="success" v-if="row.status==='online'" @click="handleClose(row)">在线</el-button>
           <el-button size="small" type="danger" v-if="row.status==='offline'" @click="handleStart(row)">离线</el-button>
+          <el-button size="small" type="success" v-if="row.status==='online'" @click="handleDown(row)">下线</el-button>
+          <el-button size="small" type="danger" v-if="row.status==='offline'" @click="handleUp(row)">上线</el-button>
         </template>
       </el-table-column>
-      <el-table-column prop="desc" label="描述" />
       <el-table-column label="操作" width="250">
         <template #default="{ row }">
           <el-button size="small" @click="handleEdit(row)">编辑</el-button>
@@ -296,6 +297,14 @@ const handleDelete = async (id: number) => {
   })
 }
 
+const handleDown = async (host: Host) => {
+  const index = hostList.value.findIndex(h => h.id === host.id);
+  hostList.value[index].status = 'offline';
+}
+const handleUp = async (host: Host) => {
+  const index = hostList.value.findIndex(h => h.id === host.id);
+  hostList.value[index].status = 'online';
+}
 const handleClose = async (host: Host) => {
   ElMessage.info(`正在关闭 ${host.ip}:${host.port}`);
   const index = hostList.value.findIndex(h => h.id === host.id);
@@ -303,7 +312,6 @@ const handleClose = async (host: Host) => {
     CloseServer(host.ip, host.password || '');
     let timerId: number;
     let attemptCount = 0; // 添加一个计数器
-
     const startTimer = () => {
       timerId = window.setInterval(async () => {
         await fetch(`http://${host.ip}:5189/metrics`, {
