@@ -50,13 +50,18 @@
               <el-input v-model="formData.password" type="password" show-password />
             </el-form-item>
           </el-col>
-          <el-col :span="24">
+          <el-col  :span="24">
             <el-form-item label="描述" prop="desc">
               <el-input v-model="formData.desc" />
             </el-form-item>
           </el-col>
+          <el-col :span="24" v-if="formData.log">
+            <el-form-item label="日志" prop="log">
+              <el-input type="textarea" row="4" v-model="formData.log" />
+            </el-form-item>
+          </el-col>
           
-          <el-col :span="24">
+          <el-col :span="24" v-if="formData.token">
             <el-form-item label="IP" prop="ips">
               <template v-if="typeof formData.ips != 'string'">
               <div style="margin-top: 5px;" v-for="(item,index) in formData.ips"> 
@@ -115,6 +120,7 @@ interface Host {
   token: string
   status: 'online' | 'offline'
   install: 'doing' | 'finish' | 'wait'
+  log:string
 }
 
 const formRef = ref<FormInstance>()
@@ -139,6 +145,7 @@ const formData = reactive<Omit<Host, 'id' | 'status'>>({
   grpc: "",
   cpu: "",
   install: "wait",
+  log:''
 })
 
 const formRules = reactive<FormRules>({
@@ -328,7 +335,10 @@ const handleStart = async (host: Host) => {
   const index = hostList.value.findIndex(h => h.id === host.id);
   try {
     var token = generateRandomString(16);
-    RunServer(host.ip, host.password || '', token);
+    RunServer(host.ip, host.password || '', token).then(res=>{
+      console.log(res);
+      hostList.value[index].log = res;
+    });
     hostList.value[index].token = token;
     let timerId: number;
     let attemptCount = 0; // 添加一个计数器

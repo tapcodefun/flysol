@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -284,6 +285,7 @@ func killProcess(client *ssh.Client, pid string) error {
 
 	return nil
 }
+
 func (a *App) RunServer(sshhost string, sshpassword string, token string) string {
 	fmt.Printf("RunServer %s %s", sshhost, sshpassword)
 	// SSH 配置
@@ -310,9 +312,10 @@ func (a *App) RunServer(sshhost string, sshpassword string, token string) string
 	}
 	defer session.Close()
 
-	// 设置标准输入、输出和错误输出
-	session.Stdout = os.Stdout
-	session.Stderr = os.Stderr
+	// 创建缓冲区来收集标准输出和标准错误输出
+	var stdoutBuf, stderrBuf bytes.Buffer
+	session.Stdout = &stdoutBuf
+	session.Stderr = &stderrBuf
 	session.Stdin = os.Stdin
 
 	// 请求一个伪终端
@@ -347,8 +350,11 @@ func (a *App) RunServer(sshhost string, sshpassword string, token string) string
 		}
 	}()
 
-	// 返回启动成功的状态
+	// 等待 Goroutine 结束
+	wg.Wait()
+
+	// 返回启动成功的状态和日志
 	fmt.Println("Server started successfully. Session is kept alive.")
-	wg.Wait() // 等待 Goroutine 结束
-	return "success"
+	logs := fmt.Sprintf("Stdout: %s\nStderr: %s", stdoutBuf.String(), stderrBuf.String())
+	return logs
 }
