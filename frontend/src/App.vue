@@ -430,13 +430,13 @@ const handleStart = async (host: Host) => {
   }
 };
 
-const handleConnect = async(host: Host,model:string) => {
+const handleConnect = (host: Host,model:string) => {
   const index = hostList.value.findIndex(h => h.id === host.id);
   var url = 'http://'+host.ip+':5189?model='+model+'&code='+host.token;
-    axios.get(url, {
+  axios.get("http://"+host.ip+":5189/metrics", {
     headers: {'Content-Type': 'application/json'}
   })
-  .then(response => {
+  .then(() => {
     host.status = 'online';
     hostList.value[index] = host;
     if (isMacOS() == true) {
@@ -458,8 +458,13 @@ const handleConnect = async(host: Host,model:string) => {
         ElMessage.error('无法打开新窗口，请检查浏览器设置');
       }
     }
-  }).catch(err=>{
-    return ElMessage.error('服务器异常');
+  }).catch(async()=>{
+    try {
+      await navigator.clipboard.writeText(url);
+      return ElMessage.error('复制成功');
+    } catch (err) {
+      return ElMessage.error('服务器异常');
+    }
   })
 }
 
