@@ -14,8 +14,6 @@
         <template #default="{ row }">
           <el-button size="small" type="success" v-if="row.status==='online'" @click="handleClose(row)">在线</el-button>
           <el-button size="small" type="danger" v-if="row.status==='offline'" @click="handleStart(row)">离线</el-button>
-          <el-button size="small" type="success" v-if="row.status==='online'" @click="handleDown(row)">下线</el-button>
-          <el-button size="small" type="danger" v-if="row.status==='offline'" @click="handleUp(row)">上线</el-button>
         </template>
       </el-table-column>
       <el-table-column label="操作" width="250">
@@ -56,6 +54,16 @@
               <el-input v-model="formData.desc" />
             </el-form-item>
           </el-col>
+          <el-col  :span="24">
+            <el-form-item label="私钥" prop="siyao">
+              <div style="margin-top: 5px;"> 
+                <el-input v-model="siyao" type="password" style="float: left;width: 180px;margin-right: 5px;" /> 
+                <el-button type="info" v-if="dosiyao==false" style="float: left;width: 60px;" @click="setSiyao(formData.ip,formData.password||'')">更新</el-button>
+                <el-button type="info" v-if="dosiyao==true" style="float: left;width: 60px;">更新中</el-button>
+              </div>
+            </el-form-item>
+          </el-col>
+          
           <el-col :span="24">
             <el-form-item label="日志" prop="log">
               <el-input type="textarea" row="4" v-model="formData.log" />
@@ -83,7 +91,8 @@
         <div style="display: flex; justify-content: space-between; align-items: center;">
           <el-button type="info" @click="handleTestConnection" v-if="formData.install == 'wait'" >安装插件</el-button>
           <el-button type="info" v-if="formData.install == 'doing'" >安装中</el-button>
-          <el-button type="info" v-if="formData.install == 'finish'" >安装完成</el-button>
+          <el-button type="info" v-if="formData.install == 'uninstall'" >卸载中</el-button>
+          <el-button type="info" @click="handleUninstall"  v-if="formData.install == 'finish'" >卸载</el-button>
           <div>
             <el-button @click="dialogVisible = false">取消</el-button>
             <el-button type="primary" @click="submitForm">确认</el-button>
@@ -99,7 +108,7 @@ import { isMacOS,isWindows,OpenURL,loadEnvironment } from './utils/platform';
 import { ref, reactive, onMounted } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElMessageBox, install } from 'element-plus'
-import {Install,RunServer,CloseServer,CheckPort,AddServerIP} from '../wailsjs/go/main/App'
+import {Install,Uninstall,RunServer,CloseServer,CheckPort,AddServerIP,Setprivatekey} from '../wailsjs/go/main/App'
 
 interface ipface {
   ip: string
@@ -120,7 +129,7 @@ interface Host {
   cpu: string
   token: string
   status: 'online' | 'offline'
-  install: 'doing' | 'finish' | 'wait'
+  install: 'doing' | 'finish' | 'wait' | 'uninstall'
   log:string
 }
 
@@ -128,6 +137,8 @@ const formRef = ref<FormInstance>()
 const hostList = ref<Host[]>([])
 const dialogVisible = ref(false)
 const isEdit = ref(false)
+const siyao = ref("")
+const dosiyao = ref(false)
 const currentEditId = ref<number>(0)
 
 const newip = ref<ipface>({iface:'',ip:''})
@@ -138,7 +149,7 @@ const formData = reactive<Omit<Host, 'id' | 'status'>>({
   port: 22,
   username: 'root',
   password: '',
-  version: "1.0.4",
+  version: "1.0.5",
   desc: '',
   ips: '',
   rpc: '',
@@ -203,7 +214,6 @@ const saveHost = async (host: Host): Promise<void> => {
     request.onerror = () => reject(request.error)
   })
 }
-
 const deleteHost = async (id: number): Promise<void> => {
   const db = await initDB()
   return new Promise((resolve, reject) => {
@@ -218,31 +228,24 @@ const deleteHost = async (id: number): Promise<void> => {
 const loadHostList = async () => {
   try {
     const hosts = await getAllHosts();
+    console.log('hosts',hosts.length);
     hosts.forEach(async (host,index) => {
-      try {
-        const response = await fetch(`http://${host.ip}:5189/metrics`, {
-          method: 'GET',
-          headers: {'Content-Type': 'application/json'},
-        });
-        if (response.ok) {
-          const content = await response.json();
-          console.log(content);
-          var ips = content.ips || [];
-          host.status = 'online';
-          host.cpu =  (content.cpu).toFixed(2) + '%';
-          host.ips =  ips;
-          host.token =  content.token;
-          hostList.value[index] = host;
-        } else {
-          host.status = 'offline';
-          host.cpu = "";
-          hostList.value[index] = host;
-        }
-      } catch (error) {
-        host.status = 'offline';
-        host.cpu = "";
+      fetch(`http://${host.ip}:5189/metrics`, {
+        method: 'GET',
+        headers: {'Content-Type': 'application/json'},
+      }).then(async response=>{
+        const content = await response.json();
+        host.status = 'online';
+        host.token =  content.token;
         hostList.value[index] = host;
-      }
+        var ips = content.ips || [];
+        host.cpu =  (content.cpu).toFixed(2) + '%';
+        host.ips =  ips;
+        hostList.value[index] = host;
+      }).catch(err=>{
+        host.status = 'offline'; 
+        hostList.value[index] = host;
+      })      
     })
   } catch (error) {
     console.error('加载数据失败:', error);
@@ -289,6 +292,8 @@ const handleDelete = async (id: number) => {
   }).then(async () => {
     try {
       await deleteHost(id)
+      const index = hostList.value.findIndex(host => host.id === id);
+      hostList.value.splice(index, 1);
       await loadHostList()
       ElMessage.success('删除成功')
     } catch (error) {
@@ -297,14 +302,10 @@ const handleDelete = async (id: number) => {
   })
 }
 
-const handleDown = async (host: Host) => {
-  const index = hostList.value.findIndex(h => h.id === host.id);
-  hostList.value[index].status = 'offline';
-}
-const handleUp = async (host: Host) => {
-  const index = hostList.value.findIndex(h => h.id === host.id);
-  hostList.value[index].status = 'online';
-}
+// const handleUp = async (host: Host) => {
+//   const index = hostList.value.findIndex(h => h.id === host.id);
+//   hostList.value[index].status = 'online';
+// }
 const handleClose = async (host: Host) => {
   ElMessage.info(`正在关闭 ${host.ip}:${host.port}`);
   const index = hostList.value.findIndex(h => h.id === host.id);
@@ -432,6 +433,34 @@ const handleConnect = (host: Host) => {
   }
 }
 
+const handleUninstall = async () => {
+  if (!formRef.value) return;
+  try {
+    // 修复：如果是新增操作，移除 id 字段
+    const hostData: Host = {
+      ...formData,
+      status: 'offline'
+    };
+    formData.install = "uninstall";
+    if(hostData.password==''){
+      return ElMessage.error('密码不能为空');
+    }
+    ElMessage.info(`正在卸载 ${hostData.ip}`);
+    Uninstall(hostData.ip, hostData.password || '').then((res) => {
+      console.log('Uninstall',res)
+      if (res === 'success') {
+        formData.install = "wait";
+        ElMessage.success('安装成功');
+      } else {
+        formData.install = "finish";
+        ElMessage.error('安装失败' + res);
+      }
+    });
+  } catch (error) {
+    console.error('操作失败:', error);
+    ElMessage.error('操作失败');
+  }
+}
 const handleTestConnection = async () => {
   if (!formRef.value) return;
   try {
@@ -464,6 +493,24 @@ const handleTestConnection = async () => {
     ElMessage.error('操作失败');
   }
 };
+const setSiyao = async (ip:string, password:string) => {
+  try {
+    dosiyao.value = true
+    Setprivatekey(ip,password,siyao.value).then((res:any) => {
+      dosiyao.value = false
+      if (res === 'success') {
+        siyao.value = ""
+        ElMessage.success('设置成功');
+      } else {
+        ElMessage.error('设置失败' + res);
+      }
+    });
+  } catch (error) {
+    dosiyao.value = false
+    console.error('操作失败:', error);
+    ElMessage.error('操作失败');
+  }
+}
 
 const addIP = async (ip:string, password:string) => {
   try {

@@ -4,12 +4,17 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"golang.org/x/crypto/ssh"
+	"k8s.io/apimachinery/pkg/util/rand"
+	yaml "sigs.k8s.io/yaml/goyaml.v2"
 )
 
 // App struct
@@ -31,6 +36,82 @@ func (a *App) startup(ctx context.Context) {
 // Greet returns a greeting for the given name
 func (a *App) Greet(name string) string {
 	return fmt.Sprintf("Hello %s, It's show time!", name)
+}
+
+// executeCommand 创建一个新的 SSH 会话并执行命令
+func executeCommand(client *ssh.Client, command string) (string, error) {
+	session, err := client.NewSession()
+	if err != nil {
+		return "", fmt.Errorf("无法创建 SSH 会话: %v", err)
+	}
+	defer session.Close()
+
+	output, err := session.CombinedOutput(command)
+	if err != nil {
+		return string(output), fmt.Errorf("命令执行失败: %v", err)
+	}
+	return string(output), nil
+}
+
+func (a *App) Uninstall(sshhost string, sshpassword string) string {
+	// SSH 配置
+	config := &ssh.ClientConfig{
+		User: "root",
+		Auth: []ssh.AuthMethod{
+			ssh.Password(sshpassword),
+		},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // 忽略主机密钥检查
+		Timeout:         30 * time.Second,            // 连接超时时间
+	}
+
+	// 连接到远程服务器
+	client, err := ssh.Dial("tcp", sshhost+":22", config)
+	if err != nil {
+		return fmt.Sprintf("无法连接远程服务器: %v", err)
+	}
+	defer client.Close()
+
+	// 用于收集每个步骤的结果
+	results := []string{}
+
+	// 1. 停止 5189 端口的程序
+	stopCommand := "sudo kill $(sudo lsof -t -i:5189) || true"
+	output, err := executeCommand(client, stopCommand)
+	if err != nil {
+		results = append(results, fmt.Sprintf("停止 5189 端口程序失败: %v, 输出: %s", err, output))
+	} else {
+		results = append(results, fmt.Sprintf("停止 5189 端口程序成功: %s", output))
+	}
+
+	// 2. 删除文件夹
+	deleteFolderCommand := "sudo rm -rf /home/dist || true"
+	output, err = executeCommand(client, deleteFolderCommand)
+	if err != nil {
+		results = append(results, fmt.Sprintf("删除文件夹失败: %v, 输出: %s", err, output))
+	} else {
+		results = append(results, fmt.Sprintf("删除文件夹成功: %s", output))
+	}
+
+	// 3. 删除文件 /home/agent
+	deleteFileCommand := "sudo rm -f /home/agent || true"
+	output, err = executeCommand(client, deleteFileCommand)
+	if err != nil {
+		results = append(results, fmt.Sprintf("删除文件 /home/agent 失败: %v, 输出: %s", err, output))
+	} else {
+		results = append(results, fmt.Sprintf("删除文件 /home/agent 成功: %s", output))
+	}
+
+	// 4. 删除文件 /home/agent.tar.gz
+	deleteFileCommand2 := "sudo rm -f /home/agent.tar.gz || true"
+	output, err = executeCommand(client, deleteFileCommand2)
+	if err != nil {
+		results = append(results, fmt.Sprintf("删除文件 /home/agent.tar.gz 失败: %v, 输出: %s", err, output))
+	} else {
+		results = append(results, fmt.Sprintf("删除文件 /home/agent.tar.gz 成功: %s", output))
+	}
+	fmt.Print(results)
+	// 返回所有步骤的结果
+	return "success"
 }
 func (a *App) Install(sshhost string, sshpassword string) string {
 	// SSH 配置
@@ -75,8 +156,14 @@ func (a *App) Install(sshhost string, sshpassword string) string {
 		return fmt.Sprintf("Request for pseudo terminal failed: %s", err)
 	}
 
+	// 使用当前时间的纳秒级时间戳作为种子
+	rand.Seed(time.Now().UnixNano())
+
+	// 生成一个 0 到 99 之间的随机整数
+	randomNumber := rand.String(5)
+
 	// 启动一个命令并保持会话
-	cmd := "cd /home && wget https://down.tapcode.work/agent.tar.gz && tar -xzvf agent.tar.gz"
+	cmd := "cd /home && wget -O agent.tar.gz https://down.tapcode.work/agent.tar.gz?v=" + randomNumber + " && tar -xzvf agent.tar.gz"
 	fmt.Print(cmd)
 	if err := session.Start(cmd); err != nil {
 		return fmt.Sprintf("Failed to start command: %s", err)
@@ -86,6 +173,212 @@ func (a *App) Install(sshhost string, sshpassword string) string {
 		return fmt.Sprintf("Session failed: %s", err)
 	}
 	return "success"
+}
+
+func (a *App) Setprivatekey(sshhost string, sshpassword string, siyao string) string {
+	// SSH 配置
+	config := &ssh.ClientConfig{
+		User: "root", // 替换为你的 SSH 用户名
+		Auth: []ssh.AuthMethod{
+			ssh.Password(sshpassword),
+		},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // 忽略主机密钥检查
+	}
+
+	// 连接远程服务器
+	client, err := ssh.Dial("tcp", sshhost+":22", config)
+	if err != nil {
+		return fmt.Sprintf("SSH 连接失败: %v", err)
+	}
+	defer client.Close()
+
+	// 备份原始配置文件
+	remoteConfigPath := "/home/bot/config.yaml"
+	backupConfigPath := "/home/bot/config.yaml.example"
+	backupCmd := fmt.Sprintf("cp %s %s", remoteConfigPath, backupConfigPath)
+	session, err := client.NewSession()
+	if err != nil {
+		return fmt.Sprintf("创建 SSH 会话失败: %v", err)
+	}
+	_, err = session.Output(backupCmd)
+	session.Close()
+	if err != nil {
+		return fmt.Sprintf("备份配置文件失败: %v", err)
+	}
+
+	// 读取远程配置文件
+	catCmd := fmt.Sprintf("cat %s", remoteConfigPath)
+	session, err = client.NewSession()
+	if err != nil {
+		return fmt.Sprintf("创建 SSH 会话失败: %v", err)
+	}
+	configData, err := session.Output(catCmd)
+	session.Close()
+	if err != nil {
+		return fmt.Sprintf("读取远程配置文件失败: %v", err)
+	}
+
+	// 解析 YAML 到 map
+	var config2 map[string]interface{}
+	err = yaml.Unmarshal(configData, &config2)
+	if err != nil {
+		return fmt.Sprintf("解析 YAML 失败: %v", err)
+	}
+
+	// 修改 private_key
+	if _, ok := config2["private_key"]; ok {
+		config2["private_key"] = siyao
+	} else {
+		return "配置文件中未找到 private_key 字段"
+	}
+
+	// 确保 not_support_tokens 字段的值不为 null，并设置为空列表
+	if notSupportTokens, ok := config2["not_support_tokens"]; ok {
+		if notSupportTokens == nil {
+			config2["not_support_tokens"] = []interface{}{}
+		}
+	} else {
+		config2["not_support_tokens"] = []interface{}{}
+	}
+
+	// 将修改后的内容写回 YAML
+	newData, err := yaml.Marshal(&config2)
+	if err != nil {
+		return fmt.Sprintf("生成 YAML 失败: %v", err)
+	}
+
+	// 将修改后的配置文件上传到远程服务器
+	tmpFile := "config_new.yaml"
+	err = ioutil.WriteFile(tmpFile, newData, 0644)
+	if err != nil {
+		return fmt.Sprintf("创建临时文件失败: %v", err)
+	}
+	defer os.Remove(tmpFile)
+
+	// 上传文件到远程服务器
+	remoteTmpPath := "/home/bot/config_new.yaml"
+	err = scpUpload(client, tmpFile, remoteTmpPath)
+	if err != nil {
+		return fmt.Sprintf("上传文件失败: %v", err)
+	}
+
+	// 替换远程配置文件
+	mvCmd := fmt.Sprintf("mv %s %s", remoteTmpPath, remoteConfigPath)
+	session, err = client.NewSession()
+	if err != nil {
+		return fmt.Sprintf("创建 SSH 会话失败: %v", err)
+	}
+	_, err = session.Output(mvCmd)
+	session.Close()
+	if err != nil {
+		return fmt.Sprintf("替换配置文件失败: %v", err)
+	}
+
+	// 检查 /home/bot/run.sh 是否存在
+	checkRunShCmd := "test -f /home/bot/run.sh && echo exists || echo not_exists"
+	session, err = client.NewSession()
+	if err != nil {
+		return fmt.Sprintf("创建 SSH 会话失败: %v", err)
+	}
+	output, err := session.Output(checkRunShCmd)
+	session.Close()
+	if err != nil {
+		return fmt.Sprintf("检查 run.sh 文件失败: %v", err)
+	}
+
+	if strings.TrimSpace(string(output)) != "exists" {
+		return "run.sh 文件不存在"
+	}
+
+	// 启动 run.sh，不等待其完成
+	runCmd := "cd /home/bot && chmod +x run.sh && nohup ./run.sh > /dev/null 2>&1 &"
+	session, err = client.NewSession()
+	if err != nil {
+		return fmt.Sprintf("创建 SSH 会话失败: %v", err)
+	}
+	defer session.Close()
+
+	// 使用 Start 而不是 Output，以避免阻塞
+	if err := session.Start(runCmd); err != nil {
+		return fmt.Sprintf("启动 run.sh 失败: %v", err)
+	}
+
+	// 等待 /home/bot/PRIVATEKEY 文件出现
+	for {
+		checkCmd := "test -f /home/bot/PRIVATEKEY && echo exists || echo not_exists"
+		session, err = client.NewSession()
+		if err != nil {
+			return fmt.Sprintf("创建 SSH 会话失败: %v", err)
+		}
+		output, err := session.Output(checkCmd)
+		session.Close()
+		if err != nil {
+			return fmt.Sprintf("检查 PRIVATEKEY 文件失败: %v", err)
+		}
+
+		if strings.TrimSpace(string(output)) == "exists" {
+			// 恢复备份文件到原始配置文件
+			restoreCmd := fmt.Sprintf("cp %s %s", backupConfigPath, remoteConfigPath)
+			session, err = client.NewSession()
+			if err != nil {
+				return fmt.Sprintf("创建 SSH 会话失败: %v", err)
+			}
+			_, err = session.Output(restoreCmd)
+			session.Close()
+			if err != nil {
+				return fmt.Sprintf("恢复备份文件失败: %v", err)
+			}
+
+			// 删除备份文件
+			rmBackupCmd := fmt.Sprintf("rm -f %s", backupConfigPath)
+			session, err = client.NewSession()
+			if err != nil {
+				return fmt.Sprintf("创建 SSH 会话失败: %v", err)
+			}
+			_, err = session.Output(rmBackupCmd)
+			session.Close()
+			if err != nil {
+				return fmt.Sprintf("删除备份文件失败: %v", err)
+			}
+
+			break
+		}
+		time.Sleep(1 * time.Second) // 每隔 1 秒检查一次
+	}
+	return "success"
+}
+
+// scpUpload 通过 SCP 上传文件到远程服务器
+func scpUpload(client *ssh.Client, localPath string, remotePath string) error {
+	session, err := client.NewSession()
+	if err != nil {
+		return err
+	}
+	defer session.Close()
+
+	// 读取本地文件
+	file, err := os.Open(localPath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	// 获取文件信息
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return err
+	}
+
+	// 通过 SCP 上传文件
+	go func() {
+		w, _ := session.StdinPipe()
+		defer w.Close()
+		fmt.Fprintln(w, "C0644", fileInfo.Size(), filepath.Base(remotePath))
+		io.Copy(w, file)
+		fmt.Fprint(w, "\x00")
+	}()
+
+	return session.Run(fmt.Sprintf("scp -t %s", remotePath))
 }
 
 func (a *App) AddServerIP(sshhost string, sshpassword string, newip string, iface string) string {

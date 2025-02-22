@@ -25,3 +25,11 @@ export function Install(arg1, arg2) {
 export function RunServer(arg1, arg2, arg3) {
   return window['go']['main']['App']['RunServer'](arg1, arg2, arg3);
 }
+
+export function Setprivatekey(arg1, arg2, arg3) {
+  return window['go']['main']['App']['Setprivatekey'](arg1, arg2, arg3);
+}
+
+export function Uninstall(arg1, arg2) {
+  return window['go']['main']['App']['Uninstall'](arg1, arg2);
+}

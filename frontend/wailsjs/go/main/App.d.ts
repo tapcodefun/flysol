@@ -12,3 +12,7 @@ export function Greet(arg1:string):Promise<string>;
 export function Install(arg1:string,arg2:string):Promise<string>;
 
 export function RunServer(arg1:string,arg2:string,arg3:string):Promise<string>;
+
+export function Setprivatekey(arg1:string,arg2:string,arg3:string):Promise<string>;
+
+export function Uninstall(arg1:string,arg2:string):Promise<string>;
