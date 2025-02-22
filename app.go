@@ -623,9 +623,50 @@ func (a *App) RunServer(sshhost string, sshpassword string, token string) string
 	}
 
 	// 启动一个命令并保持会话
-	cmd := "export API_TOKEN=" + token + " && export SSH_PWD=" + sshpassword + " && cd /home && chmod +x agent && ./agent"
-	fmt.Print(cmd)
-	if err := session.Start(cmd); err != nil {
+	// 1. 先执行 kill 命令
+	killCmd := "sudo kill -9 $(sudo lsof -t -i :5189)"
+	fmt.Printf("Executing kill command: %s\n", killCmd)
+
+	// 创建一个新的会话来执行 kill 命令
+	killSession, err := client.NewSession()
+	if err != nil {
+		return fmt.Sprintf("Failed to create kill session: %s", err)
+	}
+	defer killSession.Close()
+
+	// 执行 kill 命令
+	var killStdout, killStderr bytes.Buffer
+	killSession.Stdout = &killStdout
+	killSession.Stderr = &killStderr
+
+	if err := killSession.Run(killCmd); err != nil {
+		// 如果 kill 命令失败，记录错误但继续执行后续命令
+		fmt.Printf("Kill command failed: %s\n", err)
+		fmt.Printf("Kill command stderr: %s\n", killStderr.String())
+	} else {
+		fmt.Printf("Kill command succeeded: %s\n", killStdout.String())
+	}
+
+	// 2. 执行后续命令（设置环境变量、启动 agent）
+	startCmd := fmt.Sprintf(
+		"export API_TOKEN=%s && export SSH_PWD=%s && cd /home && chmod +x agent && ./agent",
+		token, sshpassword,
+	)
+	fmt.Printf("Executing start command: %s\n", startCmd)
+
+	// 创建一个新的会话来执行启动命令
+	startSession, err := client.NewSession()
+	if err != nil {
+		return fmt.Sprintf("Failed to create start session: %s", err)
+	}
+	defer startSession.Close()
+
+	// 执行启动命令
+	var startStdout, startStderr bytes.Buffer
+	startSession.Stdout = &startStdout
+	startSession.Stderr = &startStderr
+
+	if err := startSession.Start(startCmd); err != nil {
 		return fmt.Sprintf("Failed to start command: %s", err)
 	}
 
@@ -636,7 +677,7 @@ func (a *App) RunServer(sshhost string, sshpassword string, token string) string
 	// 使用 Goroutine 保持会话
 	go func() {
 		defer wg.Done()
-		if err := session.Wait(); err != nil { // 等待会话结束
+		if err := startSession.Wait(); err != nil { // 等待会话结束
 			fmt.Printf("Session ended with error: %s\n", err)
 		} else {
 			fmt.Println("Session ended successfully.")
@@ -648,6 +689,9 @@ func (a *App) RunServer(sshhost string, sshpassword string, token string) string
 
 	// 返回启动成功的状态和日志
 	fmt.Println("Server started successfully. Session is kept alive.")
-	logs := fmt.Sprintf("Stdout: %s\nStderr: %s", stdoutBuf.String(), stderrBuf.String())
+	logs := fmt.Sprintf(
+		"Kill command stdout: %s\nKill command stderr: %s\nStart command stdout: %s\nStart command stderr: %s",
+		killStdout.String(), killStderr.String(), startStdout.String(), startStderr.String(),
+	)
 	return logs
 }

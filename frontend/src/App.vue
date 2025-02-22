@@ -14,14 +14,16 @@
         <template #default="{ row }">
           <el-button size="small" type="success" v-if="row.status==='online'" @click="handleClose(row)">在线</el-button>
           <el-button size="small" type="danger" v-if="row.status==='offline'" @click="handleStart(row)">离线</el-button>
+          <el-button size="small" type="success" v-if="row.status==='onling'">开启中</el-button>
+          <el-button size="small" type="danger" v-if="row.status==='offling'">关闭中</el-button>
         </template>
       </el-table-column>
       <el-table-column label="操作" width="250">
         <template #default="{ row }">
           <el-button size="small" @click="handleEdit(row)">编辑</el-button>
           <el-button size="small" type="danger" @click="handleDelete(row.id)">删除</el-button>
-          <el-button size="small" type="primary" @click="handleInstall(row)">配置</el-button>
-          <el-button size="small" type="success" @click="handleConnect(row)">连接</el-button>
+          <el-button size="small" type="primary" @click="handleConnect(row,'')">配置</el-button>
+          <el-button size="small" type="success" @click="handleConnect(row,'run')">连接</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -128,7 +130,7 @@ interface Host {
   grpc: string
   cpu: string
   token: string
-  status: 'online' | 'offline'
+  status: 'online' | 'offline' | 'offing' | 'oning'
   install: 'doing' | 'finish' | 'wait' | 'uninstall'
   log:string
 }
@@ -309,6 +311,7 @@ const handleDelete = async (id: number) => {
 const handleClose = async (host: Host) => {
   ElMessage.info(`正在关闭 ${host.ip}:${host.port}`);
   const index = hostList.value.findIndex(h => h.id === host.id);
+  hostList.value[index].status = 'offing';
   try {
     CloseServer(host.ip, host.password || '');
     let timerId: number;
@@ -326,8 +329,10 @@ const handleClose = async (host: Host) => {
           }
         }).catch(err=>{
           clearInterval(timerId);
+          if(hostList.value[index].status !='offline'){
+            ElMessage.success('关闭成功');
+          }
           hostList.value[index].status = 'offline';
-          ElMessage.success('关闭成功');
         })
       }, 1000); // 每1秒执行一次
     };
@@ -335,13 +340,14 @@ const handleClose = async (host: Host) => {
     startTimer();
   } catch (error) {
     console.error('关闭失败:', error);
-    ElMessage.error('关闭失败');
+    ElMessage.error('关闭异常');
   }
 };
 
 const handleStart = async (host: Host) => {
   ElMessage.info(`正在连接 ${host.ip}:${host.port}`);
   const index = hostList.value.findIndex(h => h.id === host.id);
+  hostList.value[index].status = 'oning';
   try {
     var token = generateRandomString(16);
     RunServer(host.ip, host.password || '', token).then(res=>{
@@ -358,8 +364,10 @@ const handleStart = async (host: Host) => {
         console.log(res);
         if (res === 'success') {
           clearInterval(timerId);
+          if(hostList.value[index].status!='online'){
+            ElMessage.success('启动成功');
+          }
           hostList.value[index].status = 'online';
-          ElMessage.success('启动成功');
         } else {
           attemptCount++;
           if (attemptCount >= 10) {
@@ -373,64 +381,40 @@ const handleStart = async (host: Host) => {
     startTimer();
   } catch (error) {
     console.error('启动失败:', error);
-    ElMessage.error('启动失败');
+    ElMessage.error('启动异常');
   }
 };
 
-const handleInstall = (host: Host) => {
-  if(host.status == 'offline'){
-    return ElMessage.error('服务器未启动');
-  }
-  var url = 'http://'+host.ip+':5189?model=&code='+host.token;;
-  if (isMacOS() == true) {
-    OpenURL(url);
-  }else if (isWindows() == true) {
-    const windowFeatures = 'width=800,height=600,resizable=yes,scrollbars=yes';
-    const newWindow = window.open(url, '', windowFeatures);
-    if (newWindow) {
-      // 设置新窗口的标题
-      newWindow.document.title = `连接主机 - ${host.name}`;
-      
-      // 添加加载中的提示
-      newWindow.document.body.innerHTML = `
-        <div style="display: flex; justify-content: center; align-items: center; height: 100vh;">
-          <h2>正在连接到 ${host.ip}:${host.port}...</h2>
-        </div>
-      `;
-    } else {
-      ElMessage.error('无法打开新窗口，请检查浏览器设置');
+const handleConnect = async(host: Host,model:string) => {
+  const index = hostList.value.findIndex(h => h.id === host.id);
+  var url = 'http://'+host.ip+':5189?model='+model+'&code='+host.token;
+  fetch(`http://${host.ip}:5189/metrics`, {
+    method: 'GET',headers: {'Content-Type': 'application/json'}
+  }).then(async()=>{
+    host.status = 'online';
+    hostList.value[index] = host;
+    if (isMacOS() == true) {
+      OpenURL(url);
+    }else if (isWindows() == true) {
+      const windowFeatures = 'width=800,height=600,resizable=yes,scrollbars=yes';
+      const newWindow = window.open(url, '', windowFeatures);
+      if (newWindow) {
+        // 设置新窗口的标题
+        newWindow.document.title = `连接主机 - ${host.name}`;
+        
+        // 添加加载中的提示
+        newWindow.document.body.innerHTML = `
+          <div style="display: flex; justify-content: center; align-items: center; height: 100vh;">
+            <h2>正在连接到 ${host.ip}:${host.port}...</h2>
+          </div>
+        `;
+      } else {
+        ElMessage.error('无法打开新窗口，请检查浏览器设置');
+      }
     }
-  }
-}
-const handleConnect = (host: Host) => {
-  if(host.status == 'offline'){
-    return ElMessage.error('服务器未启动');
-  }
-  var url = 'http://'+host.ip+':5189?model=run&code='+host.token;
-  if (isMacOS() == true) {
-    OpenURL(url);
-  }else if (isWindows() == true) {
-    const windowFeatures = 'width=800,height=600,resizable=yes,scrollbars=yes';
-    const newWindow = window.open(url, '', windowFeatures);
-    if (newWindow) {
-      // 设置新窗口的标题
-      newWindow.document.title = `连接主机 - ${host.name}`;
-      
-      // 添加加载中的提示
-      newWindow.document.body.innerHTML = `
-        <div style="display: flex; justify-content: center; align-items: center; height: 100vh;">
-          <h2>正在连接到 ${host.ip}:${host.port}...</h2>
-        </div>
-      `;
-
-      // 预留后续逻辑
-      // 这里可以添加 WebSocket 连接、终端初始化等逻辑
-      // 例如：
-      // initTerminal(newWindow, host);
-    } else {
-      ElMessage.error('无法打开新窗口，请检查浏览器设置');
-    }
-  }
+  }).catch(err=>{
+    return ElMessage.error('服务器异常');
+  })
 }
 
 const handleUninstall = async () => {
