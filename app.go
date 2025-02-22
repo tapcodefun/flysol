@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -248,11 +247,27 @@ func (a *App) Setprivatekey(sshhost string, sshpassword string, siyao string) st
 	}
 
 	// 将修改后的配置文件上传到远程服务器
-	tmpFile := "config_new.yaml"
-	err = ioutil.WriteFile(tmpFile, newData, 0644)
-	if err != nil {
+	tmpFile := filepath.Join(os.TempDir(), "config_new.yaml")
+
+	// 确保目录存在
+	dir := filepath.Dir(tmpFile)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Sprintf("创建目录失败: %v", err)
+	}
+
+	// 检查文件是否存在并删除
+	if _, err := os.Stat(tmpFile); err == nil {
+		if err := os.Remove(tmpFile); err != nil {
+			return fmt.Sprintf("删除已存在文件失败: %v", err)
+		}
+	}
+
+	// 使用 os.WriteFile 写入文件
+	if err := os.WriteFile(tmpFile, newData, 0644); err != nil {
 		return fmt.Sprintf("创建临时文件失败: %v", err)
 	}
+
+	// 确保文件在使用后被删除
 	defer os.Remove(tmpFile)
 
 	// 上传文件到远程服务器
