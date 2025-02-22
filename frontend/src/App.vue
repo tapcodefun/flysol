@@ -459,12 +459,7 @@ const handleConnect = (host: Host,model:string) => {
       }
     }
   }).catch(async()=>{
-    try {
-      await navigator.clipboard.writeText(url);
-      return ElMessage.error('复制成功');
-    } catch (err) {
-      return ElMessage.error('服务器异常');
-    }
+    OpenURL(url);
   })
 }
 
