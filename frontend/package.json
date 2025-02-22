@@ -12,6 +12,7 @@
     "@wailsapp/runtime": "^1.1.1",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
+    "axios": "^1.7.9",
     "element-plus": "^2.9.4",
     "js-base64": "^3.7.7",
     "vue": "^3.2.37"

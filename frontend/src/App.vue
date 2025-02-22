@@ -142,7 +142,7 @@ const isEdit = ref(false)
 const siyao = ref("")
 const dosiyao = ref(false)
 const currentEditId = ref<number>(0)
-
+  import axios from 'axios';
 const newip = ref<ipface>({iface:'',ip:''})
 
 const formData = reactive<Omit<Host, 'id' | 'status'>>({
@@ -227,28 +227,27 @@ const deleteHost = async (id: number): Promise<void> => {
     request.onerror = () => reject(request.error)
   })
 }
+
+
 const loadHostList = async () => {
   try {
     const hosts = await getAllHosts();
-    console.log('hosts',hosts.length);
-    hosts.forEach(async (host,index) => {
-      fetch(`http://${host.ip}:5189/metrics`, {
-        method: 'GET',
-        headers: {'Content-Type': 'application/json'},
-      }).then(async response=>{
-        const content = await response.json();
+    const updatedHosts = await Promise.all(hosts.map(async (host) => {
+      try {
+        const response = await axios.get(`http://${host.ip}:5189/metrics`, {
+          headers: {'Content-Type': 'application/json'},
+        });
+        const content = response.data; // axios 自动解析 JSON 数据
         host.status = 'online';
-        host.token =  content.token;
-        hostList.value[index] = host;
-        var ips = content.ips || [];
-        host.cpu =  (content.cpu).toFixed(2) + '%';
-        host.ips =  ips;
-        hostList.value[index] = host;
-      }).catch(err=>{
-        host.status = 'offline'; 
-        hostList.value[index] = host;
-      })      
-    })
+        host.token = content.token;
+        host.cpu = (content.cpu).toFixed(2) + '%';
+        host.ips = content.ips || [];
+      } catch (err) {
+        host.status = 'offline';
+      }
+      return host;
+    }));
+    hostList.value = updatedHosts;
   } catch (error) {
     console.error('加载数据失败:', error);
     ElMessage.error('数据加载失败');
@@ -308,89 +307,136 @@ const handleDelete = async (id: number) => {
 //   const index = hostList.value.findIndex(h => h.id === host.id);
 //   hostList.value[index].status = 'online';
 // }
+
+
 const handleClose = async (host: Host) => {
   ElMessage.info(`正在关闭 ${host.ip}:${host.port}`);
+
+  // 找到当前主机在列表中的索引
   const index = hostList.value.findIndex(h => h.id === host.id);
+  if (index === -1) return; // 如果找不到主机，直接返回
+
+  // 更新主机状态为 "关闭中"
   hostList.value[index].status = 'offing';
+
   try {
+    // 调用关闭服务器的函数
     CloseServer(host.ip, host.password || '');
-    let timerId: number;
-    let attemptCount = 0; // 添加一个计数器
-    const startTimer = () => {
-      timerId = window.setInterval(async () => {
-        await fetch(`http://${host.ip}:5189/metrics`, {
-          method: 'GET',
+
+    let attemptCount = 0; // 尝试次数计数器
+    const maxAttempts = 10; // 最大尝试次数
+    const pollInterval = 1000; // 轮询间隔时间（1秒）
+
+    // 定义轮询函数
+    const pollServerStatus = async () => {
+      try {
+        // 发送请求检查服务器状态
+        const response = await axios.get(`http://${host.ip}:5189/metrics`, {
           headers: {'Content-Type': 'application/json'},
-        }).then(res=>{
-          attemptCount++; // 每次查询失败后增加计数器
-          if (attemptCount >= 10) { // 如果达到10次查询
-            clearInterval(timerId);
-            ElMessage.error('关闭失败');
-          }
-        }).catch(err=>{
-          clearInterval(timerId);
-          if(hostList.value[index].status !='offline'){
-            ElMessage.success('关闭成功');
-          }
-          hostList.value[index].status = 'offline';
-        })
-      }, 1000); // 每1秒执行一次
+        });
+
+        // 如果服务器仍在运行，增加尝试次数
+        attemptCount++;
+        if (attemptCount >= maxAttempts) {
+          // 达到最大尝试次数，停止轮询并提示关闭失败
+          ElMessage.error('关闭失败');
+          hostList.value[index].status = 'offline'; // 更新状态为离线
+          return;
+        }
+
+        // 继续轮询
+        setTimeout(pollServerStatus, pollInterval);
+      } catch (err) {
+        // 如果请求失败，说明服务器已关闭
+        ElMessage.success('关闭成功');
+        hostList.value[index].status = 'offline'; // 更新状态为离线
+      }
     };
 
-    startTimer();
+    // 开始轮询
+    pollServerStatus();
   } catch (error) {
+    // 处理关闭过程中的异常
     console.error('关闭失败:', error);
     ElMessage.error('关闭异常');
+    hostList.value[index].status = 'offline'; // 更新状态为离线
   }
 };
 
 const handleStart = async (host: Host) => {
   ElMessage.info(`正在连接 ${host.ip}:${host.port}`);
-  const index = hostList.value.findIndex(h => h.id === host.id);
-  hostList.value[index].status = 'oning';
-  try {
-    var token = generateRandomString(16);
-    RunServer(host.ip, host.password || '', token).then(res=>{
-      console.log(res);
-      hostList.value[index].log = res;
-    });
-    hostList.value[index].token = token;
-    let timerId: number;
-    let attemptCount = 0; // 添加一个计数器
 
-    const startTimer = () => {
-      timerId = window.setInterval(async () => {
+  // 找到当前主机在列表中的索引
+  const index = hostList.value.findIndex(h => h.id === host.id);
+  if (index === -1) return; // 如果找不到主机，直接返回
+
+  // 更新主机状态为 "启动中"
+  hostList.value[index].status = 'oning';
+
+  try {
+    // 生成随机 token
+    const token = generateRandomString(16);
+    hostList.value[index].token = token;
+
+    // 启动服务器
+    const res = await RunServer(host.ip, host.password || '', token);
+    console.log(res);
+    hostList.value[index].log = res;
+
+    let attemptCount = 0; // 尝试次数计数器
+    const maxAttempts = 10; // 最大尝试次数
+    const pollInterval = 1000; // 轮询间隔时间（1秒）
+
+    // 定义轮询函数
+    const pollServerStatus = async () => {
+      try {
+        // 检查端口状态
         const res = await CheckPort(host.ip, host.password || '');
         console.log(res);
+
         if (res === 'success') {
-          clearInterval(timerId);
-          if(hostList.value[index].status!='online'){
-            ElMessage.success('启动成功');
-          }
+          // 如果启动成功，停止轮询并更新状态
+          ElMessage.success('启动成功');
           hostList.value[index].status = 'online';
+          return;
         } else {
+          // 如果未成功，增加尝试次数
           attemptCount++;
-          if (attemptCount >= 10) {
-            clearInterval(timerId);
+          if (attemptCount >= maxAttempts) {
+            // 达到最大尝试次数，停止轮询并提示启动失败
             ElMessage.error('启动失败');
+            hostList.value[index].status = 'offline'; // 更新状态为离线
+            return;
           }
+
+          // 继续轮询
+          setTimeout(pollServerStatus, pollInterval);
         }
-      }, 1000); // 每1秒执行一次
+      } catch (err) {
+        // 如果检查端口状态失败，停止轮询并提示启动异常
+        console.error('检查端口状态失败:', err);
+        ElMessage.error('启动异常');
+        hostList.value[index].status = 'offline'; // 更新状态为离线
+      }
     };
 
-    startTimer();
+    // 开始轮询
+    pollServerStatus();
   } catch (error) {
+    // 处理启动过程中的异常
     console.error('启动失败:', error);
     ElMessage.error('启动异常');
+    hostList.value[index].status = 'offline'; // 更新状态为离线
   }
 };
 
 const handleConnect = async(host: Host,model:string) => {
   const index = hostList.value.findIndex(h => h.id === host.id);
   var url = 'http://'+host.ip+':5189?model='+model+'&code='+host.token;
-  fetch(`http://${host.ip}:5189/metrics`, {
-    method: 'GET',headers: {'Content-Type': 'application/json'}
-  }).then(async()=>{
+    axios.get(url, {
+    headers: {'Content-Type': 'application/json'}
+  })
+  .then(response => {
     host.status = 'online';
     hostList.value[index] = host;
     if (isMacOS() == true) {
