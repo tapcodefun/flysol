@@ -54,10 +54,10 @@ func executeCommand(client *ssh.Client, command string) (string, error) {
 	return string(output), nil
 }
 
-func (a *App) Uninstall(sshhost string, sshpassword string) string {
+func (a *App) Uninstall(sshhost string, sshpassword string, sshuser string, sshport string) string {
 	// SSH 配置
 	config := &ssh.ClientConfig{
-		User: "root",
+		User: sshuser,
 		Auth: []ssh.AuthMethod{
 			ssh.Password(sshpassword),
 		},
@@ -66,7 +66,7 @@ func (a *App) Uninstall(sshhost string, sshpassword string) string {
 	}
 
 	// 连接到远程服务器
-	client, err := ssh.Dial("tcp", sshhost+":22", config)
+	client, err := ssh.Dial("tcp", sshhost+":"+sshport, config)
 	if err != nil {
 		return fmt.Sprintf("无法连接远程服务器: %v", err)
 	}
@@ -114,10 +114,10 @@ func (a *App) Uninstall(sshhost string, sshpassword string) string {
 	// 返回所有步骤的结果
 	return "success"
 }
-func (a *App) Install(sshhost string, sshpassword string) string {
+func (a *App) Install(sshhost string, sshpassword string, sshuser string, sshport string) string {
 	// SSH 配置
 	config := &ssh.ClientConfig{
-		User: "root",
+		User: sshuser,
 		Auth: []ssh.AuthMethod{
 			ssh.Password(sshpassword),
 		},
@@ -126,7 +126,7 @@ func (a *App) Install(sshhost string, sshpassword string) string {
 	}
 
 	// 连接到远程服务器
-	client, err := ssh.Dial("tcp", sshhost+":22", config)
+	client, err := ssh.Dial("tcp", sshhost+":"+sshport, config)
 	if err != nil {
 		return fmt.Sprintf("Failed to dial: %s %s %s", err, sshpassword, sshhost)
 	}
@@ -176,10 +176,10 @@ func (a *App) Install(sshhost string, sshpassword string) string {
 	return "success"
 }
 
-func (a *App) Setprivatekey(sshhost string, sshpassword string, siyao string) string {
+func (a *App) Setprivatekey(sshhost string, sshpassword string, siyao string, sshuser string, sshport string) string {
 	// SSH 配置
 	config := &ssh.ClientConfig{
-		User: "root", // 替换为你的 SSH 用户名
+		User: sshuser, // 替换为你的 SSH 用户名
 		Auth: []ssh.AuthMethod{
 			ssh.Password(sshpassword),
 		},
@@ -187,7 +187,7 @@ func (a *App) Setprivatekey(sshhost string, sshpassword string, siyao string) st
 	}
 
 	// 连接远程服务器
-	client, err := ssh.Dial("tcp", sshhost+":22", config)
+	client, err := ssh.Dial("tcp", sshhost+":"+sshport, config)
 	if err != nil {
 		return fmt.Sprintf("SSH 连接失败: %v", err)
 	}
@@ -398,10 +398,10 @@ func scpUpload(client *ssh.Client, localPath string, remotePath string) error {
 	return session.Run(fmt.Sprintf("scp -t %s", remotePath))
 }
 
-func (a *App) AddServerIP(sshhost string, sshpassword string, newip string, iface string) string {
+func (a *App) AddServerIP(sshhost string, sshpassword string, newip string, iface string, sshuser string, sshport string) string {
 	// SSH 配置
 	config := &ssh.ClientConfig{
-		User: "root",
+		User: sshuser,
 		Auth: []ssh.AuthMethod{
 			ssh.Password(sshpassword),
 		},
@@ -410,7 +410,7 @@ func (a *App) AddServerIP(sshhost string, sshpassword string, newip string, ifac
 	}
 
 	// 连接到远程服务器
-	client, err := ssh.Dial("tcp", sshhost+":22", config)
+	client, err := ssh.Dial("tcp", sshhost+":"+sshport, config)
 	if err != nil {
 		return fmt.Sprintf("Failed to dial: %s %s %s", err, sshpassword, sshhost)
 	}
@@ -453,10 +453,36 @@ func (a *App) AddServerIP(sshhost string, sshpassword string, newip string, ifac
 	}
 	return "success"
 }
-func sshSession(sshhost string, sshpassword string) (*ssh.Session, error) {
+
+// func sshSession(sshhost string, sshpassword string, sshuser string, sshport string) (*ssh.Session, error) {
+// 	// SSH 配置
+// 	config := &ssh.ClientConfig{
+// 		User: sshuser,
+// 		Auth: []ssh.AuthMethod{
+// 			ssh.Password(sshpassword),
+// 		},
+// 		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // 忽略主机密钥检查
+// 		Timeout:         10 * time.Second,            // 连接超时时间
+// 	}
+
+//		// 连接到远程服务器
+//		client, err := ssh.Dial("tcp", sshhost+":"+sshport, config)
+//		if err != nil {
+//			return nil, err
+//		}
+//		defer client.Close()
+//		// 创建一个会话
+//		session, err := client.NewSession()
+//		if err != nil {
+//			return nil, err
+//		}
+//		defer session.Close()
+//		return session, nil
+//	}
+func (a *App) CheckPort(sshhost string, sshpassword string, sshuser string, sshport string) string {
 	// SSH 配置
 	config := &ssh.ClientConfig{
-		User: "root",
+		User: sshuser,
 		Auth: []ssh.AuthMethod{
 			ssh.Password(sshpassword),
 		},
@@ -465,32 +491,7 @@ func sshSession(sshhost string, sshpassword string) (*ssh.Session, error) {
 	}
 
 	// 连接到远程服务器
-	client, err := ssh.Dial("tcp", sshhost+":22", config)
-	if err != nil {
-		return nil, err
-	}
-	defer client.Close()
-	// 创建一个会话
-	session, err := client.NewSession()
-	if err != nil {
-		return nil, err
-	}
-	defer session.Close()
-	return session, nil
-}
-func (a *App) CheckPort(sshhost string, sshpassword string) string {
-	// SSH 配置
-	config := &ssh.ClientConfig{
-		User: "root",
-		Auth: []ssh.AuthMethod{
-			ssh.Password(sshpassword),
-		},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // 忽略主机密钥检查
-		Timeout:         10 * time.Second,            // 连接超时时间
-	}
-
-	// 连接到远程服务器
-	client, err := ssh.Dial("tcp", sshhost+":22", config)
+	client, err := ssh.Dial("tcp", sshhost+":"+sshport, config)
 	if err != nil {
 		return fmt.Sprintf("Failed to dial: %s %s %s", err, sshpassword, sshhost)
 	}
@@ -605,10 +606,10 @@ func toJSON(host Host) string {
 	}
 	return string(jsonData)
 }
-func (a *App) CloseServer(sshhost string, sshpassword string) string {
+func (a *App) CloseServer(sshhost string, sshpassword string, sshuser string, sshport string) string {
 	// SSH 配置
 	config := &ssh.ClientConfig{
-		User: "root",
+		User: sshuser,
 		Auth: []ssh.AuthMethod{
 			ssh.Password(sshpassword),
 		},
@@ -617,7 +618,7 @@ func (a *App) CloseServer(sshhost string, sshpassword string) string {
 	}
 
 	// 连接到远程服务器
-	client, err := ssh.Dial("tcp", sshhost+":22", config)
+	client, err := ssh.Dial("tcp", sshhost+":"+sshport, config)
 	if err != nil {
 		return fmt.Sprintf("Failed to connect to SSH server: %s", err)
 	}
@@ -675,11 +676,11 @@ func killProcess(client *ssh.Client, pid string) error {
 	return nil
 }
 
-func (a *App) RunServer(sshhost string, sshpassword string, token string) string {
+func (a *App) RunServer(sshhost string, token string, sshpassword string, sshuser string, sshport string) string {
 	fmt.Printf("RunServer %s %s", sshhost, sshpassword)
 	// SSH 配置
 	config := &ssh.ClientConfig{
-		User: "root",
+		User: sshuser,
 		Auth: []ssh.AuthMethod{
 			ssh.Password(sshpassword),
 		},
@@ -688,7 +689,7 @@ func (a *App) RunServer(sshhost string, sshpassword string, token string) string
 	}
 
 	// 连接到远程服务器
-	client, err := ssh.Dial("tcp", sshhost+":22", config)
+	client, err := ssh.Dial("tcp", sshhost+":"+sshport, config)
 	if err != nil {
 		return fmt.Sprintf("Failed to dial: %s %s %s", err, sshpassword, sshhost)
 	}
@@ -720,8 +721,8 @@ func (a *App) RunServer(sshhost string, sshpassword string, token string) string
 
 	// 执行后续命令（设置环境变量、启动 agent）
 	startCmd := fmt.Sprintf(
-		"export API_TOKEN=%s && export SSH_PWD=%s && cd /home && chmod +x agent && ./agent",
-		token, sshpassword,
+		"export API_TOKEN=%s && export SSH_PWD=%s && export SSH_USER=%s && export SSH_PORT=%s && cd /home && chmod +x agent && ./agent",
+		token, sshpassword, sshuser, sshport,
 	)
 	fmt.Printf("Executing start command: %s\n", startCmd)
 

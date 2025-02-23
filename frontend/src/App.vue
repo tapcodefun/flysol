@@ -45,12 +45,17 @@
               <el-input v-model="formData.name" />
             </el-form-item>
           </el-col>
-          <el-col :span="24">
+          <el-col :span="12">
             <el-form-item label="IP地址" prop="ip">
               <el-input v-model="formData.ip" />
             </el-form-item>
           </el-col>
-          <el-col :span="12">
+          <el-col :span="12" v-if="formData.install == 'wait' || formData.install == 'doing'">
+            <el-form-item label="端口" prop="port">
+              <el-input v-model="formData.port" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12" v-if="formData.install == 'wait' || formData.install == 'doing'">
             <el-form-item label="用户名" prop="username">
               <el-input v-model="formData.username" />
             </el-form-item>
@@ -74,7 +79,7 @@
             <el-form-item label="私钥" prop="siyao">
               <div style="margin-top: 5px;"> 
                 <el-input v-model="siyao" type="password" style="float: left;width: 180px;margin-right: 5px;" /> 
-                <el-button type="info" v-if="dosiyao==false" style="float: left;width: 60px;" @click="setSiyao(formData.ip,formData.password||'')">更新</el-button>
+                <el-button type="info" v-if="dosiyao==false" style="float: left;width: 60px;" @click="setSiyao(formData.ip,formData.password||'',formData.username,formData.port+'')">更新</el-button>
                 <el-button type="info" v-if="dosiyao==true" style="float: left;width: 60px;">更新中</el-button>
               </div>
             </el-form-item>
@@ -97,7 +102,7 @@
               <div style="margin-top: 5px;"> 
                 <el-input v-model="newip.ip" style="float: left;width: 160px;margin-right: 5px;" /> 
                 <el-input v-model="newip.iface" style="float: left;width: 80px;margin-right: 5px;" /> 
-                <el-button type="info" style="float: left;width: 60px;" @click="addIP(formData.ip,formData.password||'')">增加</el-button>
+                <el-button type="info" style="float: left;width: 60px;" @click="addIP(formData.ip,formData.password||'',formData.username,formData.port+'')">增加</el-button>
               </div>
             </el-form-item>
           </el-col>
@@ -341,11 +346,12 @@ const handleClose = async (host: Host) => {
   if (index === -1) return; // 如果找不到主机，直接返回
 
   // 更新主机状态为 "关闭中"
+  hostList.value[index].pid = -2;
   hostList.value[index].status = 'offing';
 
   try {
     // 调用关闭服务器的函数
-    CloseServer(host.ip, host.password || '');
+    CloseServer(host.ip, host.password || '',host.username, host.port+"");
 
     let attemptCount = 0; // 尝试次数计数器
     const maxAttempts = 10; // 最大尝试次数
@@ -403,7 +409,7 @@ const handleStart = async (host: Host) => {
     hostList.value[index].token = token;
 
     // 启动服务器
-    const res = await RunServer(host.ip, host.password || '', token);
+    const res = await RunServer(host.ip,token, host.password || '', host.username, host.port+"");
     console.log(res);
     hostList.value[index].log = res;
 
@@ -415,7 +421,7 @@ const handleStart = async (host: Host) => {
     const pollServerStatus = async () => {
       try {
         // 检查端口状态
-        const res = await CheckPort(host.ip, host.password || '');
+        const res = await CheckPort(host.ip, host.password || '',host.username, host.port+"");
         console.log(res);
 
         if (res === 'success') {
@@ -519,7 +525,7 @@ const handleUninstall = async () => {
       return ElMessage.error('密码不能为空');
     }
     ElMessage.info(`正在卸载 ${hostData.ip}`);
-    Uninstall(hostData.ip, hostData.password || '').then((res) => {
+    Uninstall(hostData.ip, hostData.password || '',hostData.username,hostData.port+"").then((res) => {
       console.log('Uninstall',res)
       if (res === 'success') {
         formData.install = "wait";
@@ -550,7 +556,7 @@ const handleTestConnection = async () => {
       return ElMessage.error('密码不能为空');
     }
     ElMessage.info(`正在连接 ${hostData.ip}`);
-    Install(hostData.ip, hostData.password || '').then((res) => {
+    Install(hostData.ip, hostData.password || '',hostData.username,hostData.port+"").then((res) => {
       if (res === 'success') {
         // 使用 Vue 的响应式方法确保更新
         formData.install = "finish";
@@ -566,10 +572,10 @@ const handleTestConnection = async () => {
     ElMessage.error('操作失败');
   }
 };
-const setSiyao = async (ip:string, password:string) => {
+const setSiyao = async (ip:string, password:string,username:string,port:string) => {
   try {
     dosiyao.value = true
-    Setprivatekey(ip,password,siyao.value).then((res:any) => {
+    Setprivatekey(ip,password,siyao.value,username,port+"").then((res:any) => {
       dosiyao.value = false
       if (res === 'success') {
         siyao.value = ""
@@ -585,9 +591,9 @@ const setSiyao = async (ip:string, password:string) => {
   }
 }
 
-const addIP = async (ip:string, password:string) => {
+const addIP = async (ip:string, password:string,username:string,port:string) => {
   try {
-    AddServerIP(ip,password,newip.value.ip,newip.value.iface).then((res:any) => {
+    AddServerIP(ip,password,newip.value.ip,newip.value.iface,username,port).then((res:any) => {
       console.log(res);
     });
   } catch (error) {
