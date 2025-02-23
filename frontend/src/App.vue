@@ -24,6 +24,7 @@
           <el-button size="small" type="danger" v-if="row.status==='offline'" @click="handleStart(row)">离线</el-button>
           <el-button size="small" type="success" v-if="row.status==='onling'">开启中</el-button>
           <el-button size="small" type="danger" v-if="row.status==='offling'">关闭中</el-button>
+          <el-button size="small" type="danger" v-if="row.status==='offline' && row.pid>0" @click="handleClose(row)">关闭</el-button>
         </template>
       </el-table-column>
       <el-table-column label="操作" width="200">
