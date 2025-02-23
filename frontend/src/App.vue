@@ -18,12 +18,11 @@
           <el-button size="small" type="danger" v-if="row.status==='offling'">关闭中</el-button>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="250">
+      <el-table-column label="操作" width="200">
         <template #default="{ row }">
           <el-button size="small" @click="handleEdit(row)">编辑</el-button>
           <el-button size="small" type="danger" @click="handleDelete(row.id)">删除</el-button>
-          <el-button size="small" type="primary" @click="handleConnect(row,'')">配置</el-button>
-          <el-button size="small" type="success" @click="handleConnect(row,'run')">连接</el-button>
+          <el-button size="small" type="success" @click="handleConnect(row)">连接</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -430,9 +429,9 @@ const handleStart = async (host: Host) => {
   }
 };
 
-const handleConnect = (host: Host,model:string) => {
+const handleConnect = (host: Host) => {
   const index = hostList.value.findIndex(h => h.id === host.id);
-  var url = 'http://'+host.ip+':5189?model='+model+'&code='+host.token;
+  var url = 'http://'+host.ip+':5189?model=run&code='+host.token;
   axios.get("http://"+host.ip+":5189/metrics", {
     headers: {'Content-Type': 'application/json'}
   })
@@ -442,7 +441,7 @@ const handleConnect = (host: Host,model:string) => {
     if (isMacOS() == true) {
       OpenURL(url);
     }else if (isWindows() == true) {
-      const windowFeatures = 'width=800,height=600,resizable=yes,scrollbars=yes';
+      const windowFeatures = 'width=900,height=600,resizable=yes,scrollbars=yes';
       const newWindow = window.open(url, '', windowFeatures);
       if (newWindow) {
         // 设置新窗口的标题

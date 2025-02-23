@@ -637,32 +637,7 @@ func (a *App) RunServer(sshhost string, sshpassword string, token string) string
 		return fmt.Sprintf("Request for pseudo terminal failed: %s", err)
 	}
 
-	// 启动一个命令并保持会话
-	// 1. 先执行 kill 命令
-	killCmd := "sudo kill -9 $(sudo lsof -t -i :5189)"
-	fmt.Printf("Executing kill command: %s\n", killCmd)
-
-	// 创建一个新的会话来执行 kill 命令
-	killSession, err := client.NewSession()
-	if err != nil {
-		return fmt.Sprintf("Failed to create kill session: %s", err)
-	}
-	defer killSession.Close()
-
-	// 执行 kill 命令
-	var killStdout, killStderr bytes.Buffer
-	killSession.Stdout = &killStdout
-	killSession.Stderr = &killStderr
-
-	if err := killSession.Run(killCmd); err != nil {
-		// 如果 kill 命令失败，记录错误但继续执行后续命令
-		fmt.Printf("Kill command failed: %s\n", err)
-		fmt.Printf("Kill command stderr: %s\n", killStderr.String())
-	} else {
-		fmt.Printf("Kill command succeeded: %s\n", killStdout.String())
-	}
-
-	// 2. 执行后续命令（设置环境变量、启动 agent）
+	// 执行后续命令（设置环境变量、启动 agent）
 	startCmd := fmt.Sprintf(
 		"export API_TOKEN=%s && export SSH_PWD=%s && cd /home && chmod +x agent && ./agent",
 		token, sshpassword,
@@ -705,8 +680,8 @@ func (a *App) RunServer(sshhost string, sshpassword string, token string) string
 	// 返回启动成功的状态和日志
 	fmt.Println("Server started successfully. Session is kept alive.")
 	logs := fmt.Sprintf(
-		"Kill command stdout: %s\nKill command stderr: %s\nStart command stdout: %s\nStart command stderr: %s",
-		killStdout.String(), killStderr.String(), startStdout.String(), startStderr.String(),
+		"Start command stdout: %s\nStart command stderr: %s",
+		startStdout.String(), startStderr.String(),
 	)
 	return logs
 }
