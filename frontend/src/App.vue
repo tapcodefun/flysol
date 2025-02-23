@@ -63,6 +63,11 @@
               <el-input v-model="formData.desc" />
             </el-form-item>
           </el-col>
+          <el-col  :span="24" v-if="formData.token">
+            <el-form-item label="安全码" prop="token">
+              <el-input v-model="formData.token" />
+            </el-form-item>
+          </el-col>
           <el-col  :span="24">
             <el-form-item label="私钥" prop="siyao">
               <div style="margin-top: 5px;"> 
