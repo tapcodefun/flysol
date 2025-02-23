@@ -7,6 +7,8 @@ export function CheckPort(arg1:string,arg2:string):Promise<string>;
 
 export function CloseServer(arg1:string,arg2:string):Promise<string>;
 
+export function Fetchost(arg1:string):Promise<string>;
+
 export function Greet(arg1:string):Promise<string>;
 
 export function Install(arg1:string,arg2:string):Promise<string>;

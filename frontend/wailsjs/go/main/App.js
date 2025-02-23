@@ -14,6 +14,10 @@ export function CloseServer(arg1, arg2) {
   return window['go']['main']['App']['CloseServer'](arg1, arg2);
 }
 
+export function Fetchost(arg1) {
+  return window['go']['main']['App']['Fetchost'](arg1);
+}
+
 export function Greet(arg1) {
   return window['go']['main']['App']['Greet'](arg1);
 }

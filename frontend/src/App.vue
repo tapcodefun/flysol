@@ -18,7 +18,7 @@
           <el-tag v-else>{{row.pid}}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="status" label="状态" width="130">
+      <el-table-column prop="status" label="状态" width="80">
         <template #default="{ row }">
           <el-button size="small" type="success" v-if="row.status==='online'" @click="handleClose(row)">在线</el-button>
           <el-button size="small" type="danger" v-if="row.status==='offline'" @click="handleStart(row)">离线</el-button>
@@ -27,10 +27,11 @@
           <el-button size="small" type="danger" v-if="row.status==='offline' && row.pid>0" @click="handleClose(row)">关闭</el-button>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="200">
+      <el-table-column label="操作" width="250">
         <template #default="{ row }">
           <el-button size="small" @click="handleEdit(row)">编辑</el-button>
           <el-button size="small" type="danger" @click="handleDelete(row.id)">删除</el-button>
+          <el-button size="small" type="danger" @click="handleFetch(row)">拉取</el-button>
           <el-button size="small" type="success" @click="handleConnect(row)">连接</el-button>
         </template>
       </el-table-column>
@@ -119,11 +120,13 @@
 </template>
 
 <script setup lang="ts">
+import axios from 'axios';
 import { isMacOS,isWindows,OpenURL,loadEnvironment } from './utils/platform';
 import { ref, reactive, onMounted } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElMessageBox, install } from 'element-plus'
-import {Install,Uninstall,RunServer,CloseServer,CheckPort,AddServerIP,Setprivatekey} from '../wailsjs/go/main/App'
+import {Install,Uninstall,RunServer,CloseServer,CheckPort,AddServerIP,Setprivatekey,Fetchost} from '../wailsjs/go/main/App'
+import { json } from 'stream/consumers';
 
 interface ipface {
   ip: string
@@ -156,7 +159,7 @@ const isEdit = ref(false)
 const siyao = ref("")
 const dosiyao = ref(false)
 const currentEditId = ref<number>(0)
-  import axios from 'axios';
+
 const newip = ref<ipface>({iface:'',ip:''})
 
 const formData = reactive<Omit<Host, 'id' | 'status'>>({
@@ -451,6 +454,25 @@ const handleStart = async (host: Host) => {
   }
 };
 
+const handleFetch = async (host: Host) => {
+  const index = hostList.value.findIndex(h => h.id === host.id);
+  try {
+    Fetchost(host.ip+":5189").then((res: any) => {
+      var content = JSON.parse(res)
+      console.log(content)
+      hostList.value[index].token = content.token;
+      hostList.value[index].cpu = (content.cpu).toFixed(2) + '%';
+      hostList.value[index].pid = Number(content.pid) || -2;
+      if(content.pid>0){
+        hostList.value[index].status = 'online';
+      }else{
+        hostList.value[index].status = 'offline';
+      }
+    });
+  } catch (error) {
+    ElMessage.error('获取失败');
+  }
+}
 const handleConnect = (host: Host) => {
   const index = hostList.value.findIndex(h => h.id === host.id);
   var url = 'http://'+host.ip+':5189?model=run&code='+host.token;

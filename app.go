@@ -3,8 +3,10 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -524,6 +526,85 @@ func (a *App) CheckPort(sshhost string, sshpassword string) string {
 	// }
 }
 
+type Host struct {
+	Token   string  `json:"token"`
+	Cpu     float64 `json:"cpu"`
+	Pid     int     `json:"pid"`
+	Version string  `json:"version"`
+}
+
+func (a *App) Fetchost(sshhost string) string {
+	// 初始化 Host 结构体
+	var host Host
+
+	// 从 /metrics 接口提取 Token 和 Cpu
+	metricsURL := "http://" + sshhost + "/metrics"
+	response, err := http.Get(metricsURL)
+	if err != nil {
+		fmt.Printf("请求 /metrics 接口失败: %v\n", err)
+		return toJSON(host) // 返回部分数据
+	}
+	defer response.Body.Close()
+
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		fmt.Printf("读取 /metrics 响应失败: %v\n", err)
+		return toJSON(host) // 返回部分数据
+	}
+
+	// 使用 map[string]interface{} 来解析 JSON 数据
+	var metricsData map[string]interface{}
+	if err := json.Unmarshal(body, &metricsData); err != nil {
+		fmt.Printf("解析 /metrics JSON 失败: %v\n", err)
+	} else {
+		// 提取所需的字段
+		if token, ok := metricsData["token"].(string); ok {
+			host.Token = token
+		}
+		if cpu, ok := metricsData["cpu"].(float64); ok {
+			host.Cpu = cpu
+		}
+		if version, ok := metricsData["version"].(string); ok {
+			host.Version = version
+		}
+	}
+
+	// 从 /pid 接口提取 Pid
+	pidURL := "http://" + sshhost + "/pid"
+	response2, err := http.Get(pidURL)
+	if err != nil {
+		fmt.Printf("请求 /pid 接口失败: %v\n", err)
+		return toJSON(host) // 返回部分数据
+	}
+	defer response2.Body.Close()
+
+	body2, err := io.ReadAll(response2.Body)
+	if err != nil {
+		fmt.Printf("读取 /pid 响应失败: %v\n", err)
+		return toJSON(host) // 返回部分数据
+	}
+
+	var pidData struct {
+		Pid int `json:"pid"`
+	}
+	if err := json.Unmarshal(body2, &pidData); err != nil {
+		fmt.Printf("解析 /pid JSON 失败: %v\n", err)
+	} else {
+		host.Pid = pidData.Pid
+	}
+
+	return toJSON(host)
+}
+
+// toJSON 将 Host 结构体序列化为 JSON 字符串
+func toJSON(host Host) string {
+	jsonData, err := json.Marshal(host)
+	if err != nil {
+		fmt.Printf("序列化 JSON 失败: %v\n", err)
+		return "{}" // 返回空 JSON 对象
+	}
+	return string(jsonData)
+}
 func (a *App) CloseServer(sshhost string, sshpassword string) string {
 	// SSH 配置
 	config := &ssh.ClientConfig{
