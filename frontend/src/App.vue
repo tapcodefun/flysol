@@ -10,6 +10,14 @@
       <el-table-column prop="ip" label="IP地址" width="150" />
       <el-table-column prop="version" label="版本" width="100" />
       <el-table-column prop="cpu" label="CPU" width="100" />
+      <el-table-column prop="pid" label="进程" width="100">
+        <template #default="{ row }">
+          <el-tag v-if="row.pid==-2">无</el-tag>
+          <el-tag v-else-if="row.pid==0">未启动</el-tag>
+          <el-tag v-else-if="row.pid==-1">未安装</el-tag>
+          <el-tag v-else>{{row.pid}}</el-tag>
+        </template>
+      </el-table-column>
       <el-table-column prop="status" label="状态" width="130">
         <template #default="{ row }">
           <el-button size="small" type="success" v-if="row.status==='online'" @click="handleClose(row)">在线</el-button>
@@ -126,6 +134,7 @@ interface Host {
   desc: string
   ips: ipface[] | ""
   rpc: string
+  pid:number,
   grpc: string
   cpu: string
   token: string
@@ -157,6 +166,7 @@ const formData = reactive<Omit<Host, 'id' | 'status'>>({
   token:'',
   grpc: "",
   cpu: "",
+  pid:-2,
   install: "wait",
   log:''
 })
@@ -241,6 +251,12 @@ const loadHostList = async () => {
         host.token = content.token;
         host.cpu = (content.cpu).toFixed(2) + '%';
         host.ips = content.ips || [];
+        console.log(host)
+        const response2 = await axios.get(`http://${host.ip}:5189/pid`, {
+          headers: {'Content-Type': 'application/json'},
+        });
+        host.pid = Number(response2.data.pid) || -2;
+        console.log(host)
       } catch (err) {
         host.status = 'offline';
       }
