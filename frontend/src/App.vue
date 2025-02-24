@@ -52,7 +52,7 @@
           </el-col>
           <el-col :span="12" v-if="formData.install == 'wait' || formData.install == 'doing'">
             <el-form-item label="端口" prop="port">
-              <el-input v-model="formData.port" />
+              <el-input v-model="formData.port" type="number" />
             </el-form-item>
           </el-col>
           <el-col :span="12" v-if="formData.install == 'wait' || formData.install == 'doing'">
@@ -131,8 +131,6 @@ import { ref, reactive, onMounted } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElMessageBox, install } from 'element-plus'
 import {Install,Uninstall,RunServer,CloseServer,CheckPort,AddServerIP,Setprivatekey,Fetchost} from '../wailsjs/go/main/App'
-import { json } from 'stream/consumers';
-import { id } from 'element-plus/es/locale';
 
 interface ipface {
   ip: string
@@ -194,7 +192,15 @@ const formRules = reactive<FormRules>({
   ],
   port: [
     { required: true, message: '请输入端口号', trigger: 'blur' },
-    { type: 'number', message: '端口号必须为数字', trigger: 'blur' }
+    { validator: (rule, value, callback) => {
+        if (!value) {
+          callback(new Error('请输入端口号'));
+        } else if (!Number.isInteger(Number(value))) {
+          callback(new Error('端口号必须为数字'));
+        } else {
+          callback();
+        }
+      }, trigger: 'blur' }
   ],
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }]
 })
