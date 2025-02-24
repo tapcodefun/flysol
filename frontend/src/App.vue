@@ -132,6 +132,7 @@ import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElMessageBox, install } from 'element-plus'
 import {Install,Uninstall,RunServer,CloseServer,CheckPort,AddServerIP,Setprivatekey,Fetchost} from '../wailsjs/go/main/App'
 import { json } from 'stream/consumers';
+import { id } from 'element-plus/es/locale';
 
 interface ipface {
   ip: string
@@ -265,12 +266,10 @@ const loadHostList = async () => {
         host.token = content.token;
         host.cpu = (content.cpu).toFixed(2) + '%';
         host.ips = content.ips || [];
-        console.log(host)
         const response2 = await axios.get(`http://${host.ip}:5189/pid`, {
           headers: {'Content-Type': 'application/json'},
         });
         host.pid = Number(response2.data.pid) || -2;
-        console.log(host)
       } catch (err) {
         host.status = 'offline';
       }
@@ -606,19 +605,23 @@ const submitForm = async () => {
 
   try {
     await formRef.value.validate();
-
-    // 修复：如果是新增操作，移除 id 字段
     const hostData: Host = {
       ...formData,
       status: 'online',
       install: "finish"
     };
-
+    hostData.ip = hostData.ip.trim();
+    hostData.password = hostData.password?.trim();
     if (isEdit.value && currentEditId.value) {
       // 编辑操作时，保留 id
       hostData.id = currentEditId.value;
+    }else{
+      const index = hostList.value.findIndex(h => h.ip === hostData.ip);
+      if (index > -1) {
+        return ElMessage.error('不能重复添加');
+      }
+      delete hostData.id
     }
-
     await saveHost(hostData);
     await loadHostList();
 
