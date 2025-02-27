@@ -547,7 +547,7 @@ const handleUninstall = async () => {
       return ElMessage.error('密码不能为空');
     }
     ElMessage.info(`正在卸载 ${hostData.ip}`);
-    Uninstall(hostData.ip, hostData.password || '',hostData.username,hostData.port+"").then((res) => {
+    Uninstall(hostData.ip, hostData.password || '',hostData.username,hostData.port+"",hostData.sshtype==true?hostData.private_key:"").then((res) => {
       console.log('Uninstall',res)
       if (res === 'success') {
         formData.install = "wait";
