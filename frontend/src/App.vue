@@ -3,7 +3,6 @@
     <div class="operation-bar">
       <el-button type="primary" @click="handleAdd">添加主机</el-button>
       <el-button type="success" @click="loadHostList">刷新主机</el-button>
-      <el-button type="success" @click="newWindows">新窗口</el-button>
     </div>
 
     <el-table :data="hostList" border style="width: 100%">
@@ -429,7 +428,7 @@ const handleStart = async (host: Host) => {
     // 生成随机 token
     const token = generateRandomString(16);
     hostList.value[index].token = token;
-
+    console.log("sshtype",host.sshtype);
     // 启动服务器
     const res = await RunServer(host.ip,token, host.password || '', host.username, host.port+"",host.sshtype==true?host.private_key:"");
     console.log(res);

@@ -22,3 +22,7 @@ To build a redistributable, production mode package, use `wails build`.
 wails build -p darwin/amd64  # 针对 Intel Mac
 wails build -p darwin/arm64  # 针对 Apple Silicon Mac
 ```
+
+```
+export PATH=$PATH:$(go env GOPATH)/bin
+```

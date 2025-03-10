@@ -670,10 +670,14 @@ func (a *App) RunServer(sshhost string, token string, sshpassword string, sshuse
 		return fmt.Sprintf("Request for pseudo terminal failed: %s", err)
 	}
 
+	sshType := "password"
+	if private_key != "" {
+		sshType = "private_key"
+	}
 	// 执行后续命令（设置环境变量、启动 agent）
 	startCmd := fmt.Sprintf(
 		"export API_TOKEN=%s && export SSH_PWD=%s && export SSH_USER=%s && export SSH_PORT=%s && export SSH_TYPE=%s && cd /home && chmod +x agent && ./agent",
-		token, sshpassword, sshuser, sshport, "private_key",
+		token, sshpassword, sshuser, sshport, sshType,
 	)
 	fmt.Printf("Executing start command: %s\n", startCmd)
 
