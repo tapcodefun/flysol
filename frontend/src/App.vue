@@ -3,8 +3,20 @@
     <div class="operation-bar">
       <el-button type="primary" @click="handleAdd">添加主机</el-button>
       <el-button type="success" @click="loadHostList">刷新主机</el-button>
+      <el-input v-model="inputValue" style="width: 200px; margin: 0 10px;" placeholder="请输入内容" />
+      <el-button type="info" @click="handleButtonClick(inputValue)">搜索</el-button>
+      <el-select  v-if="hostName" placeholder="分类" style="width: 100px; margin: 0 10px">
+      <el-option
+        v-for="item in hostName"
+        :key="item"
+        :label="item"
+        @click="handleSortClick(item)"
+      />
+    </el-select>
     </div>
-
+    <div v-if="isShow" style="display: flex; justify-content: flex-start;">
+      <el-button type="primary" @click="handleCloseConnection">关闭</el-button>
+    </div>
     <el-table :data="hostList" border style="width: 100%">
       <el-table-column prop="name" label="主机名称" width="180" />
       <el-table-column prop="ip" label="IP地址" width="150" />
@@ -27,12 +39,64 @@
           <el-button size="small" type="danger" v-if="row.status==='offline' && row.pid>0" @click="handleClose(row)">关闭</el-button>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="300">
+      <el-table-column label="操作" width="355">
         <template #default="{ row }">
-          <el-button size="small" @click="handleEdit(row)">编辑</el-button>
-          <el-button size="small" type="danger" @click="handleDelete(row.id)">删除</el-button>
-          <el-button size="small" type="danger" @click="handleFetch(row)">拉取</el-button>
-          <el-button size="small" type="success" @click="handleConnect(row)">连接</el-button>
+            <el-button size="small" @click="handleEdit(row)">编辑</el-button>
+            <el-button size="small" type="danger" @click="handleDelete(row.id)">删除</el-button>
+            <el-button size="small" type="danger" @click="handleFetch(row)">拉取</el-button>
+            <el-button size="small" type="success" @click="handleConnect(row)">连接</el-button>
+            <el-button size="small" type="success" @click="showUploadDialog">上传</el-button>
+
+            <!-- 上传弹窗 -->
+            <el-dialog v-model="uploadDialogVisible" title="上传" width="700px" top="10vh" append-to-body modal-append-to-body :modal="false" :show-close="false">
+              <el-tabs>
+                <el-tab-pane label="文件上传">
+                  <el-upload
+                    class="upload-area"
+                    drag
+                    action="#"
+                    multiple
+                    :auto-upload="false"
+                    :on-change="handleFileChange"
+                    ref="uploadRef"
+                  >
+                    <div class="upload-content">
+                      <el-icon class="upload-icon"><upload-filled /></el-icon>
+                      <div class="upload-text">将文件拖到此处，或<em>点击上传</em></div>
+                    </div>
+                    <template #tip>
+                      <div class="el-upload__tip">已选择 {{ fileList.length }} 个文件</div>
+                    </template>
+                  </el-upload>
+                </el-tab-pane> 
+                <!-- <el-tab-pane label="文件夹上传">
+                  <div class="folder-upload-container">
+                    <div class="upload-area folder-drop-area" @click="selectFolder" @dragover.prevent @drop.prevent="handleFolderDrop">
+                      <div class="upload-content">
+                        <el-icon class="upload-icon"><folder-add /></el-icon>
+                        <div class="upload-text">将文件夹拖到此处，或<em>点击选择文件夹</em></div>
+                      </div>
+                    </div>
+                    <div class="folder-preview-area" v-if="selectedFolderFiles.length > 0">
+                      <div class="folder-info">
+                        <div class="folder-item">
+                          <el-icon class="folder-icon"><folder /></el-icon>
+                          <span class="folder-name">{{ selectedFolderName }}</span>
+                          <el-icon class="delete-icon" @click="clearSelectedFolder"><close /></el-icon>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </el-tab-pane> -->
+              </el-tabs>
+              <template #footer>
+                <div class="dialog-footer">
+                  <el-button @click="uploadDialogVisible = false">取消</el-button>
+                  <el-button type="primary" @click="handleUpload">确定</el-button>
+                </div>
+              </template>
+            </el-dialog>
+            <el-button size="small" type="info">私钥</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -125,8 +189,12 @@
         </div>
       </template>
     </el-dialog>
+
+
   </div>
 </template>
+
+
 
 <script setup lang="ts">
 import axios from 'axios';
@@ -134,6 +202,7 @@ import { isMacOS,isWindows,OpenURL,loadEnvironment } from './utils/platform';
 import { ref, reactive, onMounted } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElMessageBox, install } from 'element-plus'
+import { UploadFilled, FolderAdd, Document, Folder, Close } from '@element-plus/icons-vue'
 import {OpenNewWindow,Install,Uninstall,RunServer,CloseServer,CheckPort,AddServerIP,Setprivatekey,Fetchost} from '../wailsjs/go/main/App'
 
 interface ipface {
@@ -165,11 +234,36 @@ interface Host {
 
 const formRef = ref<FormInstance>()
 const hostList = ref<Host[]>([])
+const originalHostList = ref<Host[]>([])
 const dialogVisible = ref(false)
+const uploadDialogVisible = ref(false)
 const isEdit = ref(false)
 const siyao = ref("")
 const dosiyao = ref(false)
 const currentEditId = ref<number>(0)
+const isShow = ref(false);
+const selectedFolderName = ref('')
+const selectedFolderFiles = ref<File[]>([])
+
+const handleCloseConnection = () => {
+  const connectionContainer = document.querySelector('div[style*="margin-top: 20px"]');
+  if (connectionContainer) {
+    connectionContainer.remove();
+  }
+  const hostManagement = document.querySelector('.host-management .el-table');
+  if (hostManagement) {
+    if (hostManagement instanceof HTMLElement) {
+      hostManagement.style.display = 'block';
+    }
+  }
+  const operationBar = document.querySelector('.host-management .operation-bar');
+  if (operationBar) {
+    if (operationBar instanceof HTMLElement) {
+      operationBar.style.display = 'block';
+    }
+  }
+  isShow.value = false;
+};
 
 const newip = ref<ipface>({iface:'',ip:'',status:'await'})
 
@@ -291,6 +385,8 @@ const loadHostList = async () => {
       return host;
     }));
     hostList.value = updatedHosts;
+    originalHostList.value = updatedHosts;
+    hostName.value = [...new Set(hostList.value.map((host: Host) => host.name))]
   } catch (error) {
     console.error('加载数据失败:', error);
     ElMessage.error('数据加载失败');
@@ -509,27 +605,35 @@ const handleConnect = (host: Host) => {
   .then(() => {
     host.status = 'online';
     hostList.value[index] = host;
-    if (isMacOS() == true) {
-      OpenURL(url);
-    }else if (isWindows() == true) {
-      const windowFeatures = 'width=900,height=600,resizable=yes,scrollbars=yes';
-      const newWindow = window.open(url, '', windowFeatures);
-      if (newWindow) {
-        // 设置新窗口的标题
-        newWindow.document.title = `连接主机 - ${host.name}`;
-        
-        // 添加加载中的提示
-        newWindow.document.body.innerHTML = `
-          <div style="display: flex; justify-content: center; align-items: center; height: 100vh;">
-            <h2>正在连接到 ${host.ip}:${host.port}...</h2>
-          </div>
-        `;
-      } else {
-        ElMessage.error('无法打开新窗口，请检查浏览器设置');
+    // 隐藏host-management元素
+    const hostManagement = document.querySelector('.host-management .el-table');
+    if (hostManagement) {
+      if (hostManagement instanceof HTMLElement) {
+        hostManagement.style.display = 'none';
       }
     }
+    const operationBar = document.querySelector('.host-management .operation-bar');
+    if (operationBar) {
+      if (operationBar instanceof HTMLElement) {
+        operationBar.style.display = 'none';
+      }
+    }
+    // 在页面底部添加连接显示区域
+    isShow.value = !isShow.value;
+    const connectionContainer = document.createElement('div');
+    connectionContainer.style.marginTop = '20px';
+    connectionContainer.style.height = '100vh';
+    connectionContainer.style.width = '100%';
+    connectionContainer.style.backgroundColor = '#1e1e1e';
+    connectionContainer.style.color = '#ffffff';
+    connectionContainer.innerHTML = `
+      <h3>连接到 ${host.name}</h3>
+      <iframe src="${url}" style="width: 100%; height: 100%; border: none;"></iframe>
+    `;
+    const table = document.querySelector('.el-table');
+    table?.parentNode?.insertBefore(connectionContainer, table.nextSibling);
   }).catch(async()=>{
-    OpenURL(url);
+    ElMessage.error('连接失败');
   })
 }
 
@@ -679,6 +783,143 @@ const generateRandomString = (length: number) => {
     return randomString;
 }
 
+
+const inputValue = ref('')
+const hostName = ref([''])
+// 分类功能
+const handleSortClick = (value: string) => {
+  hostList.value = originalHostList.value;
+  hostList.value = hostList.value.filter((host) => host.name.includes(value))
+}
+
+//搜索功能
+const handleButtonClick = (value: string) => {
+  hostList.value = originalHostList.value;
+  hostList.value = hostList.value.filter((host) => host.name.includes(value) || host.ip.includes(value))
+}
+////上传功能
+//const handleBeforeUpload = (file: any) => {
+//  const isLt10M = file.size / 1024 / 1024 < 10;
+//  if (!isLt10M) {
+//    ElMessage.error('上传文件大小不能超过 10MB!');
+//    return false;
+//  }
+//  return true;
+//};
+//
+//const handleUploadProgress = (event: any, file: any) => {
+//  console.log('上传进度:', Math.round(event.percent));
+//};
+//
+
+const showUploadDialog = () => {
+  uploadDialogVisible.value = true;
+}
+
+const fileList = ref([]);
+const uploadRef = ref();
+
+const handleFileChange = (file, files) => {
+  fileList.value = files;
+};
+
+const handleUpload = () => {
+  if (fileList.value.length === 0) {
+    ElMessage.warning('请先选择要上传的文件');
+    return;
+  }
+  
+  // 获取上传组件实例并调用上传方法
+  uploadRef.value.submit();
+  
+  // TODO: 在这里实现文件上传逻辑
+  console.log('开始上传文件:', fileList.value);
+  ElMessage.success('文件上传成功');
+  uploadDialogVisible.value = false;
+};
+
+// 清除选择的文件夹
+const clearSelectedFolder = () => {
+  selectedFolderFiles.value = [];
+  selectedFolderName.value = '';
+  ElMessage.success('已取消选择文件夹');
+}
+
+// 文件夹选择功能
+const selectFolder = async () => {
+  try {
+    // 创建一个隐藏的文件输入元素，设置为可选择文件夹
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.webkitdirectory = true; // 允许选择文件夹
+    input.style.display = 'none';
+    document.body.appendChild(input);
+    
+    // 监听文件夹选择事件
+    input.onchange = (event) => {
+      const files = event.target && (event.target as HTMLInputElement).files;
+      if (files && files.length > 0) {
+        // 获取文件夹名称（从第一个文件的路径中提取）
+        const folderPath = files[0].webkitRelativePath.split('/')[0];
+        selectedFolderName.value = folderPath;
+        
+        // 将FileList转换为数组并存储
+        selectedFolderFiles.value = Array.from(files);
+        
+        ElMessage.success(`已选择文件夹: ${folderPath}`);
+        console.log('选择的文件夹中的文件数量:', files.length);
+      }
+      document.body.removeChild(input);
+    };
+    
+    // 触发点击事件
+    input.click();
+  } catch (error) {
+    console.error('选择文件夹失败:', error);
+    ElMessage.error('选择文件夹失败');
+  }
+};
+
+// 处理文件夹拖放
+const handleFolderDrop = (event: DragEvent) => {
+  event.preventDefault();
+  event.stopPropagation();
+  
+  const items = event.dataTransfer?.items;
+  if (!items) return;
+  
+  // 检查是否有文件夹
+  let hasFolder = false;
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i].webkitGetAsEntry();
+    if (item && item.isDirectory) {
+      hasFolder = true;
+      break;
+    }
+  }
+  
+  if (!hasFolder) {
+    ElMessage.warning('请上传文件夹，而不是文件');
+    return;
+  }
+  
+  // 处理文件夹
+  const files: File[] = [];
+  for (let i = 0; i < event.dataTransfer!.files.length; i++) {
+    files.push(event.dataTransfer!.files[i]);
+  }
+  
+  if (files.length > 0) {
+    // 获取文件夹名称（如果可能）
+    const folderName = files[0].webkitRelativePath ? files[0].webkitRelativePath.split('/')[0] : '未知文件夹';
+    selectedFolderName.value = folderName;
+    selectedFolderFiles.value = files;
+    
+    ElMessage.success(`已拖放文件夹: ${folderName}`);
+    console.log('拖放的文件夹中的文件数量:', files.length);
+  }
+}
+
 onMounted(async() => {
   await loadEnvironment()
   loadHostList()
@@ -701,5 +942,160 @@ onMounted(async() => {
 
 .el-button + .el-button {
   margin-left: 8px;
+}
+
+.upload-demo {
+  position: relative;
+}
+
+.upload-demo .el-upload__text {
+  position: relative;
+  z-index: 1;
+  white-space: nowrap;
+}
+
+/* 上传对话框样式 */
+.upload-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+}
+
+.upload-area {
+  width: 100%;
+  height: 300px;
+  margin-bottom: 20px;
+  position: relative;
+}
+
+.el-upload-list {
+  max-height: 250px;
+  overflow-y: auto;
+  padding-right: 5px;
+  scrollbar-width: thin;
+}
+
+.el-upload-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.el-upload-list::-webkit-scrollbar-thumb {
+  background-color: #909399;
+  border-radius: 3px;
+}
+
+.el-upload-list::-webkit-scrollbar-track {
+  background-color: #f5f7fa;
+}
+
+.upload-content {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+}
+
+.upload-area:hover {
+  border-color: #409eff;
+}
+
+.upload-icon {
+  font-size: 48px;
+  color: #c0c4cc;
+  margin-bottom: 10px;
+}
+
+.upload-text {
+  color: #606266;
+  font-size: 14px;
+}
+
+.upload-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+/* 文件夹上传容器样式 */
+.folder-upload-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 320px;
+}
+
+.folder-drop-area {
+  height: 50%;
+  width: 100%;
+  min-height: 150px;
+  border: 1px dashed #d9d9d9;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 0.3s;
+}
+
+.folder-drop-area:hover {
+  border-color: #409eff;
+}
+
+.folder-preview-area {
+  height: auto;
+  margin-top: 10px;
+  border: 1px solid #e4e7ed;
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.folder-info {
+  display: flex;
+  justify-content: center;
+}
+
+.folder-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 4px;
+  background-color: #f5f7fa;
+  position: relative;
+}
+
+.folder-item:hover .delete-icon {
+  display: flex;
+}
+
+.folder-icon {
+  font-size: 20px;
+  color: #909399;
+  margin-right: 8px;
+}
+
+.folder-name {
+  font-weight: bold;
+  color: #303133;
+  margin-right: 10px;
+}
+
+.delete-icon {
+  display: none;
+  position: absolute;
+  right: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: #f56c6c;
+  color: white;
+  font-size: 12px;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.delete-icon:hover {
+  background-color: #e64242;
 }
 </style>
