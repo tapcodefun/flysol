@@ -816,11 +816,11 @@ const showUploadDialog = () => {
   uploadDialogVisible.value = true;
 }
 
-const fileList = ref([]);
+const fileList = ref<File[]>([]);
 const uploadRef = ref();
 
-const handleFileChange = (file, files) => {
-  fileList.value = files;
+const handleFileChange = (file: File, files: FileList) => {
+  fileList.value = Array.from(files);
 };
 
 const handleUpload = () => {
