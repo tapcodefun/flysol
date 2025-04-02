@@ -368,7 +368,7 @@ func scpUpload(client *ssh.Client, localPath string, remotePath string) error {
 		fmt.Fprint(w, "\x00")
 	}()
 
-	return session.Run(fmt.Sprintf("scp -t %s", remotePath))
+	return session.Run(fmt.Sprintf("scp -t -f %s", remotePath))
 }
 func (a *App) AddServerIP(sshhost string, sshpassword string, newip string, iface string, sshuser string, sshport string, private_key string) string {
 	// 连接到远程服务器
@@ -721,4 +721,45 @@ func (a *App) RunServer(sshhost string, token string, sshpassword string, sshuse
 		startStdout.String(), startStderr.String(),
 	)
 	return logs
+}
+
+// 创建并返回一个SSH客户端
+func (a *App) CreateSSHClient(host string, user string, password string, port string) (*ssh.Client, error) {
+	// 创建SSH配置
+	config := &ssh.ClientConfig{
+		User: user,
+		Auth: []ssh.AuthMethod{
+			ssh.Password(password),
+		},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:        time.Second * 5,
+	}
+
+	// 建立SSH连接
+	return ssh.Dial("tcp", fmt.Sprintf("%s:%s", host, port), config)
+}
+
+// uploadPrivatekey 从远程主机获取私钥文件内容
+func (a *App) UploadPrivatekey(host string, user string, password string, port string) string {
+	// 创建SSH客户端
+	client, err := a.CreateSSHClient(host, user, password, port)
+	if err != nil {
+		return fmt.Sprintf("SSH连接失败: %v", err)
+	}
+	defer client.Close()
+
+	// 创建新的会话来读取文件
+	session, err := client.NewSession()
+	if err != nil {
+		return fmt.Sprintf("创建SSH会话失败: %v", err)
+	}
+	defer session.Close()
+
+	// 读取私钥文件内容
+	output, err := session.Output("cat /home/bot/PRIVATE_KEY")
+	if err != nil {
+		return fmt.Sprintf("读取私钥文件失败: %v", err)
+	}
+
+	return string(output)
 }

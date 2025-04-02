@@ -45,7 +45,7 @@
             <el-button size="small" type="danger" @click="handleDelete(row.id)">删除</el-button>
             <el-button size="small" type="danger" @click="handleFetch(row)">拉取</el-button>
             <el-button size="small" type="success" @click="handleConnect(row)">连接</el-button>
-            <el-button size="small" type="success" @click="showUploadDialog">上传</el-button>
+            <el-button size="small" type="success" @click="showUploadDialog(row)">上传</el-button>
 
             <!-- 上传弹窗 -->
             <el-dialog v-model="uploadDialogVisible" title="上传" width="700px" top="10vh" append-to-body modal-append-to-body :modal="false" :show-close="false">
@@ -68,6 +68,39 @@
                       <div class="el-upload__tip">已选择 {{ fileList.length }} 个文件</div>
                     </template>
                   </el-upload>
+                  
+                  <!-- SSH连接参数表单 -->
+                  <div class="ssh-form" style="margin-top: 20px;">
+                    <el-form :model="sshForm" label-width="100px">
+                      <el-row :gutter="20">
+                        <el-col :span="12">
+                          <el-form-item label="目标IP" prop="targetIP">
+                            <el-input v-model="sshForm.targetIP" placeholder="请输入目标主机IP" />
+                          </el-form-item>
+                        </el-col>
+                        <el-col :span="12">
+                          <el-form-item label="SSH用户" prop="sshUser">
+                            <el-input v-model="sshForm.sshUser" placeholder="请输入SSH用户名" />
+                          </el-form-item>
+                        </el-col>
+                        <el-col :span="12">
+                          <el-form-item label="SSH密码" prop="sshPassword">
+                            <el-input v-model="sshForm.sshPassword" type="password" show-password placeholder="请输入SSH密码" />
+                          </el-form-item>
+                        </el-col>
+                        <el-col :span="12">
+                          <el-form-item label="SSH端口" prop="sshPort">
+                            <el-input v-model="sshForm.sshPort" placeholder="默认22" />
+                          </el-form-item>
+                        </el-col>
+                        <el-col :span="24">
+                          <el-form-item label="远程目录" prop="remoteDir">
+                            <el-input v-model="sshForm.remoteDir" placeholder="默认/home/bot" />
+                          </el-form-item>
+                        </el-col>
+                      </el-row>
+                    </el-form>
+                  </div>
                 </el-tab-pane> 
                 <!-- <el-tab-pane label="文件夹上传">
                   <div class="folder-upload-container">
@@ -96,7 +129,7 @@
                 </div>
               </template>
             </el-dialog>
-            <el-button size="small" type="info">私钥</el-button>
+            <el-button size="small" type="info" @click="handlePrivateKey(row)">私钥</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -198,12 +231,13 @@
 
 <script setup lang="ts">
 import axios from 'axios';
+import { ElLoading } from 'element-plus';
 import { isMacOS,isWindows,OpenURL,loadEnvironment } from './utils/platform';
 import { ref, reactive, onMounted } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElMessageBox, install } from 'element-plus'
 import { UploadFilled, FolderAdd, Document, Folder, Close } from '@element-plus/icons-vue'
-import {OpenNewWindow,Install,Uninstall,RunServer,CloseServer,CheckPort,AddServerIP,Setprivatekey,Fetchost} from '../wailsjs/go/main/App'
+import { UploadFile,UploadPrivatekey,CreateSSHClient,OpenNewWindow,Install,Uninstall,RunServer,CloseServer,CheckPort,AddServerIP,Setprivatekey,Fetchost } from '../wailsjs/go/main/App'
 
 interface ipface {
   ip: string
@@ -812,114 +846,47 @@ const handleButtonClick = (value: string) => {
 //};
 //
 
-const showUploadDialog = () => {
+const showUploadDialog = (row: Host) => {
+  // 设置默认值
+  sshForm.value.targetIP = row.ip;
+  sshForm.value.sshUser = 'root'; // 默认用户名设为root
+  sshForm.value.sshPassword = row.password || ''; // 如果有密码则使用，否则为空
+  sshForm.value.sshPort = row.port ? row.port.toString() : '22';
   uploadDialogVisible.value = true;
 }
 
 const fileList = ref<File[]>([]);
 const uploadRef = ref();
 
+// SSH连接参数表单数据
+const sshForm = ref({
+  targetIP: '',
+  sshUser: '',
+  sshPassword: '',
+  sshPort: '22',
+  remoteDir: '/home/bot'
+});
+
 const handleFileChange = (file: File, files: FileList) => {
   fileList.value = Array.from(files);
 };
 
-const handleUpload = () => {
-  if (fileList.value.length === 0) {
-    ElMessage.warning('请先选择要上传的文件');
-    return;
-  }
-  
-  // 获取上传组件实例并调用上传方法
-  uploadRef.value.submit();
-  
-  // TODO: 在这里实现文件上传逻辑
-  console.log('开始上传文件:', fileList.value);
-  ElMessage.success('文件上传成功');
-  uploadDialogVisible.value = false;
-};
-
-// 清除选择的文件夹
-const clearSelectedFolder = () => {
-  selectedFolderFiles.value = [];
-  selectedFolderName.value = '';
-  ElMessage.success('已取消选择文件夹');
-}
-
-// 文件夹选择功能
-const selectFolder = async () => {
+//获取私钥文件
+const handlePrivateKey = async (row: any) => {
   try {
-    // 创建一个隐藏的文件输入元素，设置为可选择文件夹
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.webkitdirectory = true; // 允许选择文件夹
-    input.style.display = 'none';
-    document.body.appendChild(input);
-    
-    // 监听文件夹选择事件
-    input.onchange = (event) => {
-      const files = event.target && (event.target as HTMLInputElement).files;
-      if (files && files.length > 0) {
-        // 获取文件夹名称（从第一个文件的路径中提取）
-        const folderPath = files[0].webkitRelativePath.split('/')[0];
-        selectedFolderName.value = folderPath;
-        
-        // 将FileList转换为数组并存储
-        selectedFolderFiles.value = Array.from(files);
-        
-        ElMessage.success(`已选择文件夹: ${folderPath}`);
-        console.log('选择的文件夹中的文件数量:', files.length);
-      }
-      document.body.removeChild(input);
-    };
-    
-    // 触发点击事件
-    input.click();
-  } catch (error) {
-    console.error('选择文件夹失败:', error);
-    ElMessage.error('选择文件夹失败');
-  }
-};
-
-// 处理文件夹拖放
-const handleFolderDrop = (event: DragEvent) => {
-  event.preventDefault();
-  event.stopPropagation();
-  
-  const items = event.dataTransfer?.items;
-  if (!items) return;
-  
-  // 检查是否有文件夹
-  let hasFolder = false;
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i].webkitGetAsEntry();
-    if (item && item.isDirectory) {
-      hasFolder = true;
-      break;
+    ElMessage.info('正在连接并获取私钥文件...')
+    const privateKey = await UploadPrivatekey(row.ip, row.username, row.password, row.port+'')
+    if (!privateKey.includes('失败')) {
+      const privatekey = privateKey
+      console.log(privatekey)
+      ElMessage.success('私钥文件下载成功,请在控制台查看')
+    } else {
+      ElMessage.error(privateKey)
     }
-  }
-  
-  if (!hasFolder) {
-    ElMessage.warning('请上传文件夹，而不是文件');
-    return;
-  }
-  
-  // 处理文件夹
-  const files: File[] = [];
-  for (let i = 0; i < event.dataTransfer!.files.length; i++) {
-    files.push(event.dataTransfer!.files[i]);
-  }
-  
-  if (files.length > 0) {
-    // 获取文件夹名称（如果可能）
-    const folderName = files[0].webkitRelativePath ? files[0].webkitRelativePath.split('/')[0] : '未知文件夹';
-    selectedFolderName.value = folderName;
-    selectedFolderFiles.value = files;
-    
-    ElMessage.success(`已拖放文件夹: ${folderName}`);
-    console.log('拖放的文件夹中的文件数量:', files.length);
+  } catch (error) {
+    ElMessage.error('操作失败：' + error)
   }
 }
-
 onMounted(async() => {
   await loadEnvironment()
   loadHostList()

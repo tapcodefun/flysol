@@ -14,6 +14,10 @@ export function CloseServer(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['CloseServer'](arg1, arg2, arg3, arg4, arg5);
 }
 
+export function CreateSSHClient(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['CreateSSHClient'](arg1, arg2, arg3, arg4);
+}
+
 export function Fetchost(arg1) {
   return window['go']['main']['App']['Fetchost'](arg1);
 }
@@ -40,4 +44,16 @@ export function Setprivatekey(arg1, arg2, arg3, arg4, arg5, arg6) {
 
 export function Uninstall(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['Uninstall'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function UploadFile(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['main']['App']['UploadFile'](arg1, arg2, arg3, arg4, arg5, arg6);
+}
+
+export function UploadFolder(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['main']['App']['UploadFolder'](arg1, arg2, arg3, arg4, arg5, arg6);
+}
+
+export function UploadPrivatekey(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['UploadPrivatekey'](arg1, arg2, arg3, arg4);
 }
