@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -725,12 +726,29 @@ func (a *App) RunServer(sshhost string, token string, sshpassword string, sshuse
 
 // 创建并返回一个SSH客户端
 func (a *App) CreateSSHClient(host string, user string, password string, port string) (*ssh.Client, error) {
+	// 检查是否是私钥认证
+	var authMethod ssh.AuthMethod
+	if strings.HasPrefix(password, "-----BEGIN") {
+		// 尝试解析私钥
+		signer, err := ssh.ParsePrivateKey([]byte(password))
+		if err != nil {
+			// 如果解析失败，尝试使用空密码解析带密码的私钥
+			signer, err = ssh.ParsePrivateKeyWithPassphrase([]byte(password), []byte(""))
+			if err != nil {
+				// 如果仍然失败，则返回错误
+				return nil, fmt.Errorf("无法解析私钥: %v", err)
+			}
+		}
+		authMethod = ssh.PublicKeys(signer)
+	} else {
+		// 使用密码认证
+		authMethod = ssh.Password(password)
+	}
+
 	// 创建SSH配置
 	config := &ssh.ClientConfig{
 		User: user,
-		Auth: []ssh.AuthMethod{
-			ssh.Password(password),
-		},
+		Auth: []ssh.AuthMethod{authMethod},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		Timeout:        time.Second * 5,
 	}
@@ -739,10 +757,137 @@ func (a *App) CreateSSHClient(host string, user string, password string, port st
 	return ssh.Dial("tcp", fmt.Sprintf("%s:%s", host, port), config)
 }
 
+// TransferFile 接收前端传来的文件内容，通过SSH连接上传到指定主机路径
+// func (a *App) TransferFile(sshhost string, sshuser string, sshpassword string, sshport string, fileContent string, remotePath string) string {
+// 	// 创建SSH连接
+// 	client, err := sshClient(sshhost, sshpassword, sshuser, sshport)
+// 	if err != nil {
+// 		return fmt.Sprintf("SSH连接失败: %v", err)
+// 	}
+// 	defer client.Close()
+
+// 	// 创建临时文件存储前端传来的文件内容
+// 	tmpFile := filepath.Join(os.TempDir(), "transfer_tmp_"+rand.String(8))
+
+// 	// 确保目录存在
+// 	dir := filepath.Dir(tmpFile)
+// 	if err := os.MkdirAll(dir, 0755); err != nil {
+// 		return fmt.Sprintf("创建临时目录失败: %v", err)
+// 	}
+
+// 	// 写入文件内容到临时文件
+// 	if err := os.WriteFile(tmpFile, []byte(fileContent), 0644); err != nil {
+// 		return fmt.Sprintf("创建临时文件失败: %v", err)
+// 	}
+
+// 	// 确保临时文件在使用后被删除
+// 	defer os.Remove(tmpFile)
+
+// 	// 上传文件到远程服务器
+// 	err = scpUpload(client, tmpFile, remotePath)
+// 	if err != nil {
+// 		return fmt.Sprintf("文件上传失败: %v", err)
+// 	}
+
+// 	return "success"
+// }
+
 // uploadPrivatekey 从远程主机获取私钥文件内容
+// UploadFileToRemoteHost 将文件上传到远程主机
+// scpUpload 通过 SCP 上传文件到远程服务器
+func scpupload(client *ssh.Client, localPath string, remotePath string) error {
+	session, err := client.NewSession()
+	if err != nil {
+		return err
+	}
+	defer session.Close()
+
+	// 读取本地文件
+	file, err := os.Open(localPath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	// 获取文件信息
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return err
+	}
+
+	// 通过 SCP 上传文件
+	go func() {
+		w, _ := session.StdinPipe()
+		defer w.Close()
+		fmt.Fprintln(w, "C0644", fileInfo.Size(), filepath.Base(remotePath))
+		io.Copy(w, file)
+		fmt.Fprint(w, "\x00")
+	}()
+	return session.Run(fmt.Sprintf("scp -t %s", filepath.ToSlash(remotePath)))
+}
+
+func (a *App) UploadFileToRemoteHost(host string, user string, password string, port string, remoteDir string, fileName string, fileContent string) string {
+	// 连接到远程服务器
+	client, err := sshClient(host, "", password, user, port)
+	if err != nil {
+		return fmt.Sprintf("SSH连接失败: %v", err)
+	}
+	defer client.Close()
+
+	// 创建临时文件
+	tmpFile := filepath.Join(os.TempDir(), fileName)
+	
+	// 解码Base64内容
+	decoded, err := base64.StdEncoding.DecodeString(fileContent)
+	if err != nil {
+		return fmt.Sprintf("文件解码失败: %v", err)
+	}
+	
+	// 写入临时文件
+	err = os.WriteFile(tmpFile, decoded, 0644)
+	if err != nil {
+		return fmt.Sprintf("临时文件创建失败: %v", err)
+	}
+	defer os.Remove(tmpFile) // 确保临时文件被删除
+
+	// 确保远程目录存在
+	remoteDirCmd := fmt.Sprintf("mkdir -p %s", remoteDir)
+	session, err := client.NewSession()
+	if err != nil {
+		return fmt.Sprintf("创建SSH会话失败: %v", err)
+	}
+	_, err = session.CombinedOutput(remoteDirCmd)
+	session.Close()
+	if err != nil {
+		return fmt.Sprintf("创建远程目录失败: %v", err)
+	}
+
+	// 构建远程文件路径并转换为Linux风格的路径
+	remotePath := filepath.ToSlash(filepath.Join(remoteDir, fileName))
+	fmt.Printf("文件路径：%v\n", remotePath)
+	
+	// 上传文件
+	err = scpupload(client, tmpFile, remotePath)
+	if err != nil {
+		return fmt.Sprintf("文件上传失败: %v", err)
+	}
+
+	return "success"
+}
+
 func (a *App) UploadPrivatekey(host string, user string, password string, port string) string {
-	// 创建SSH客户端
-	client, err := a.CreateSSHClient(host, user, password, port)
+	// 检查是否是私钥认证
+	var client *ssh.Client
+	var err error
+	
+	if strings.HasPrefix(password, "-----BEGIN") {
+		// 使用sshClient函数处理私钥认证
+		client, err = sshClient(host, password, "", user, port)
+	} else {
+		// 使用密码认证
+		client, err = a.CreateSSHClient(host, user, password, port)
+	}
+	
 	if err != nil {
 		return fmt.Sprintf("SSH连接失败: %v", err)
 	}

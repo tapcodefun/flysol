@@ -237,7 +237,7 @@ import { ref, reactive, onMounted } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElMessageBox, install } from 'element-plus'
 import { UploadFilled, FolderAdd, Document, Folder, Close } from '@element-plus/icons-vue'
-import { UploadFile,UploadPrivatekey,CreateSSHClient,OpenNewWindow,Install,Uninstall,RunServer,CloseServer,CheckPort,AddServerIP,Setprivatekey,Fetchost } from '../wailsjs/go/main/App'
+import { UploadFileToRemoteHost,UploadPrivatekey,CreateSSHClient,OpenNewWindow,Install,Uninstall,RunServer,CloseServer,CheckPort,AddServerIP,Setprivatekey,Fetchost } from '../wailsjs/go/main/App'
 
 interface ipface {
   ip: string
@@ -870,6 +870,96 @@ const sshForm = ref({
 const handleFileChange = (file: File, files: FileList) => {
   fileList.value = Array.from(files);
 };
+
+// 处理文件上传
+const handleUpload = async () => {
+  if (fileList.value.length === 0) {
+    ElMessage.warning('请选择要上传的文件');
+    return;
+  }
+  
+  // 验证SSH连接参数
+  if (!sshForm.value.targetIP || !sshForm.value.sshUser || !sshForm.value.sshPassword) {
+    ElMessage.warning('请填写完整的SSH连接信息');
+    return;
+  }
+  
+  ElMessage.info('正在上传文件，请稍候...');
+  
+  try {
+    let successCount = 0;
+    let failCount = 0;
+    
+    // 为每个文件创建FormData对象
+    for (const file of fileList.value) {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      try {
+        // 读取文件内容为Base64
+        const fileContent = await readFileAsBase64((file as any).raw);
+        
+        // 调用后端API上传文件
+        const result = await UploadFileToRemoteHost(
+          sshForm.value.targetIP,
+          sshForm.value.sshUser,
+          sshForm.value.sshPassword,
+          sshForm.value.sshPort,
+          sshForm.value.remoteDir,
+          file.name,
+          fileContent
+        );
+        
+        if (result === 'success') {
+          successCount++;
+          ElMessage.success(`文件 ${file.name} 上传成功`);
+        } else {
+          failCount++;
+          ElMessage.error(`文件 ${file.name} 上传失败: ${result}`);
+        }
+      } catch (error) {
+        failCount++;
+        console.error(`文件 ${file.name} 上传出错:`, error);
+        ElMessage.error(`文件 ${file.name} 上传失败`);
+      }
+    }
+    
+    // 显示总体上传结果
+    if (successCount > 0) {
+      ElMessage.success(`成功上传 ${successCount} 个文件`);
+    }
+    if (failCount > 0) {
+      ElMessage.warning(`${failCount} 个文件上传失败`);
+    }
+    
+    // 关闭上传对话框
+    uploadDialogVisible.value = false;
+    // 清空文件列表
+    fileList.value = [];
+    if (uploadRef.value) {
+      uploadRef.value.clearFiles();
+    }
+  } catch (error) {
+    console.error('文件上传失败:', error);
+    ElMessage.error('文件上传失败: ' + error);
+  }
+};
+
+// 将文件读取为Base64编码
+const readFileAsBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      // 获取Base64编码，去掉前缀
+      const base64 = reader.result as string;
+      const base64Content = base64.split(',')[1];
+      resolve(base64Content);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+};
+
 
 //获取私钥文件
 const handlePrivateKey = async (row: any) => {

@@ -46,12 +46,8 @@ export function Uninstall(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['Uninstall'](arg1, arg2, arg3, arg4, arg5);
 }
 
-export function UploadFile(arg1, arg2, arg3, arg4, arg5, arg6) {
-  return window['go']['main']['App']['UploadFile'](arg1, arg2, arg3, arg4, arg5, arg6);
-}
-
-export function UploadFolder(arg1, arg2, arg3, arg4, arg5, arg6) {
-  return window['go']['main']['App']['UploadFolder'](arg1, arg2, arg3, arg4, arg5, arg6);
+export function UploadFileToRemoteHost(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
+  return window['go']['main']['App']['UploadFileToRemoteHost'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
 }
 
 export function UploadPrivatekey(arg1, arg2, arg3, arg4) {
