@@ -875,6 +875,90 @@ func (a *App) UploadFileToRemoteHost(host string, user string, password string, 
 	return "success"
 }
 
+// UploadFolderToRemoteHost 上传文件夹到远程主机，保持目录结构
+func (a *App) UploadFolderToRemoteHost(host string, user string, password string, port string, remoteDir string, folderPath string, folderContent map[string]string) string {
+	// 连接到远程服务器
+	client, err := sshClient(host, "", password, user, port)
+	if err != nil {
+		return fmt.Sprintf("SSH连接失败: %v", err)
+	}
+	defer client.Close()
+
+	// 创建临时目录用于存放解码后的文件
+	tempDir := filepath.Join(os.TempDir(), fmt.Sprintf("upload_%d", time.Now().UnixNano()))
+	err = os.MkdirAll(tempDir, 0755)
+	if err != nil {
+		return fmt.Sprintf("创建临时目录失败: %v", err)
+	}
+	defer os.RemoveAll(tempDir) // 确保临时目录被删除
+
+	// 确保远程根目录存在
+	remoteDirCmd := fmt.Sprintf("mkdir -p %s", remoteDir)
+	session, err := client.NewSession()
+	if err != nil {
+		return fmt.Sprintf("创建SSH会话失败: %v", err)
+	}
+	_, err = session.CombinedOutput(remoteDirCmd)
+	session.Close()
+	if err != nil {
+		return fmt.Sprintf("创建远程根目录失败: %v", err)
+	}
+
+	// 遍历文件内容映射
+	for relativePath, fileContent := range folderContent {
+		// 构建本地临时文件路径
+		localFilePath := filepath.Join(tempDir, relativePath)
+		localDir := filepath.Dir(localFilePath)
+
+		// 确保本地临时目录存在
+		err = os.MkdirAll(localDir, 0755)
+		if err != nil {
+			return fmt.Sprintf("创建本地临时子目录失败: %v", err)
+		}
+
+		// 解码Base64内容
+		decoded, err := base64.StdEncoding.DecodeString(fileContent)
+		if err != nil {
+			return fmt.Sprintf("文件解码失败 %s: %v", relativePath, err)
+		}
+
+		// 写入临时文件
+		err = os.WriteFile(localFilePath, decoded, 0644)
+		if err != nil {
+			return fmt.Sprintf("临时文件创建失败 %s: %v", relativePath, err)
+		}
+
+		// 构建远程目录路径
+		remoteFileDir := filepath.ToSlash(filepath.Join(remoteDir, filepath.Dir(relativePath)))
+
+		// 确保远程子目录存在
+		if filepath.Dir(relativePath) != "." {
+			remoteDirCmd := fmt.Sprintf("mkdir -p %s", remoteFileDir)
+			session, err := client.NewSession()
+			if err != nil {
+				return fmt.Sprintf("创建SSH会话失败: %v", err)
+			}
+			_, err = session.CombinedOutput(remoteDirCmd)
+			session.Close()
+			if err != nil {
+				return fmt.Sprintf("创建远程子目录失败 %s: %v", remoteFileDir, err)
+			}
+		}
+
+		// 构建远程文件路径并转换为Linux风格的路径
+		remotePath := filepath.ToSlash(filepath.Join(remoteDir, relativePath))
+		fmt.Printf("上传文件：%s -> %s\n", relativePath, remotePath)
+
+		// 上传文件
+		err = scpupload(client, localFilePath, remotePath)
+		if err != nil {
+			return fmt.Sprintf("文件上传失败 %s: %v", relativePath, err)
+		}
+	}
+
+	return "success"
+}
+
 func (a *App) UploadPrivatekey(host string, user string, password string, port string) string {
 	// 检查是否是私钥认证
 	var client *ssh.Client
