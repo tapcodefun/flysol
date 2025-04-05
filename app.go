@@ -79,7 +79,7 @@ func (a *App) Uninstall(sshhost string, sshpassword string, sshuser string, sshp
 	}
 
 	// 2. 删除文件夹
-	deleteFolderCommand := "sudo rm -rf /home/dist || true"
+	deleteFolderCommand := "sudo rm -rf /root/dist || true"
 	output, err = executeCommand(client, deleteFolderCommand)
 	if err != nil {
 		results = append(results, fmt.Sprintf("删除文件夹失败: %v, 输出: %s", err, output))
@@ -87,22 +87,22 @@ func (a *App) Uninstall(sshhost string, sshpassword string, sshuser string, sshp
 		results = append(results, fmt.Sprintf("删除文件夹成功: %s", output))
 	}
 
-	// 3. 删除文件 /home/agent
-	deleteFileCommand := "sudo rm -f /home/agent || true"
+	// 3. 删除文件 /root/agent
+	deleteFileCommand := "sudo rm -f /root/agent || true"
 	output, err = executeCommand(client, deleteFileCommand)
 	if err != nil {
-		results = append(results, fmt.Sprintf("删除文件 /home/agent 失败: %v, 输出: %s", err, output))
+		results = append(results, fmt.Sprintf("删除文件 /root/agent 失败: %v, 输出: %s", err, output))
 	} else {
-		results = append(results, fmt.Sprintf("删除文件 /home/agent 成功: %s", output))
+		results = append(results, fmt.Sprintf("删除文件 /root/agent 成功: %s", output))
 	}
 
-	// 4. 删除文件 /home/agent.tar.gz
-	deleteFileCommand2 := "sudo rm -f /home/agent.tar.gz || true"
+	// 4. 删除文件 /root/agent.tar.gz
+	deleteFileCommand2 := "sudo rm -f /root/agent.tar.gz || true"
 	output, err = executeCommand(client, deleteFileCommand2)
 	if err != nil {
-		results = append(results, fmt.Sprintf("删除文件 /home/agent.tar.gz 失败: %v, 输出: %s", err, output))
+		results = append(results, fmt.Sprintf("删除文件 /root/agent.tar.gz 失败: %v, 输出: %s", err, output))
 	} else {
-		results = append(results, fmt.Sprintf("删除文件 /home/agent.tar.gz 成功: %s", output))
+		results = append(results, fmt.Sprintf("删除文件 /root/agent.tar.gz 成功: %s", output))
 	}
 	fmt.Print(results)
 	// 返回所有步骤的结果
@@ -147,9 +147,9 @@ func (a *App) Install(sshhost string, privateKey string, sshpassword string, ssh
 	// 启动一个命令并保持会话
 	var cmd string
 	if privateKey == "" {
-		cmd = "cd /home && wget -O agent.tar.gz https://down.tapcode.work/agent.tar.gz?v=" + randomNumber + " && tar -xzvf agent.tar.gz"
+		cmd = "cd /root && wget -O agent.tar.gz https://down.tapcode.work/agent.tar.gz?v=" + randomNumber + " && tar -xzvf agent.tar.gz"
 	} else {
-		cmd = fmt.Sprintf("echo '%s' > /home/privateKey && chmod 600 /home/privateKey && cd /home && wget -O agent.tar.gz https://down.tapcode.work/agent.tar.gz?v=%s && tar -xzvf agent.tar.gz", privateKey, randomNumber)
+		cmd = fmt.Sprintf("echo '%s' > /root/privateKey && chmod 600 /root/privateKey && cd /root && wget -O agent.tar.gz https://down.tapcode.work/agent.tar.gz?v=%s && tar -xzvf agent.tar.gz", privateKey, randomNumber)
 	}
 	fmt.Print(cmd)
 	if err := session.Start(cmd); err != nil {
@@ -171,8 +171,8 @@ func (a *App) Setprivatekey(sshhost string, sshpassword string, siyao string, ss
 	defer client.Close()
 
 	// 备份原始配置文件
-	remoteConfigPath := "/home/bot/config.yaml"
-	backupConfigPath := "/home/bot/config.yaml.example"
+	remoteConfigPath := "/root/bot/config.yaml"
+	backupConfigPath := "/root/bot/config.yaml.example"
 	backupCmd := fmt.Sprintf("cp %s %s", remoteConfigPath, backupConfigPath)
 	session, err := client.NewSession()
 	if err != nil {
@@ -250,7 +250,7 @@ func (a *App) Setprivatekey(sshhost string, sshpassword string, siyao string, ss
 	defer os.Remove(tmpFile)
 
 	// 上传文件到远程服务器
-	remoteTmpPath := "/home/bot/config_new.yaml"
+	remoteTmpPath := "/root/bot/config_new.yaml"
 	err = scpUpload(client, tmpFile, remoteTmpPath)
 	if err != nil {
 		return fmt.Sprintf("上传文件失败: %v", err)
@@ -268,8 +268,8 @@ func (a *App) Setprivatekey(sshhost string, sshpassword string, siyao string, ss
 		return fmt.Sprintf("替换配置文件失败: %v", err)
 	}
 
-	// 检查 /home/bot/run.sh 是否存在
-	checkRunShCmd := "test -f /home/bot/run.sh && echo exists || echo not_exists"
+	// 检查 /root/bot/run.sh 是否存在
+	checkRunShCmd := "test -f /root/bot/run.sh && echo exists || echo not_exists"
 	session, err = client.NewSession()
 	if err != nil {
 		return fmt.Sprintf("创建 SSH 会话失败: %v", err)
@@ -285,7 +285,7 @@ func (a *App) Setprivatekey(sshhost string, sshpassword string, siyao string, ss
 	}
 
 	// 启动 run.sh，不等待其完成
-	runCmd := "cd /home/bot && chmod +x run.sh && nohup ./run.sh > /dev/null 2>&1 &"
+	runCmd := "cd /root/bot && chmod +x run.sh && nohup ./run.sh > /dev/null 2>&1 &"
 	session, err = client.NewSession()
 	if err != nil {
 		return fmt.Sprintf("创建 SSH 会话失败: %v", err)
@@ -297,9 +297,9 @@ func (a *App) Setprivatekey(sshhost string, sshpassword string, siyao string, ss
 		return fmt.Sprintf("启动 run.sh 失败: %v", err)
 	}
 
-	// 等待 /home/bot/PRIVATEKEY 文件出现
+	// 等待 /root/bot/PRIVATEKEY 文件出现
 	for {
-		checkCmd := "test -f /home/bot/PRIVATEKEY && echo exists || echo not_exists"
+		checkCmd := "test -f /root/bot/PRIVATEKEY && echo exists || echo not_exists"
 		session, err = client.NewSession()
 		if err != nil {
 			return fmt.Sprintf("创建 SSH 会话失败: %v", err)
@@ -680,9 +680,11 @@ func (a *App) RunServer(sshhost string, token string, sshpassword string, sshuse
 	}
 	// 执行后续命令（设置环境变量、启动 agent）
 	startCmd := fmt.Sprintf(
-		"export API_TOKEN=%s && export SSH_PWD=%s && export SSH_USER=%s && export SSH_PORT=%s && export SSH_TYPE=%s && cd /home && chmod +x agent && ./agent",
+		"export API_TOKEN=%s && export SSH_PWD=%s && export SSH_USER=%s && export SSH_PORT=%s && export SSH_TYPE=%s && cd /root && chmod +x agent && ./agent",
 		token, sshpassword, sshuser, sshport, sshType,
 	)
+	// 启动命令示例
+	// export API_TOKEN=token && export SSH_PWD=SiDZtDe?nk && export SSH_USER=root && export SSH_PORT=22 && export SSH_TYPE=password && cd /root && chmod +x agent && ./agent
 	fmt.Printf("Executing start command: %s\n", startCmd)
 
 	// 创建一个新的会话来执行启动命令

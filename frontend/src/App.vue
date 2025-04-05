@@ -250,6 +250,7 @@
           <el-button type="info" v-if="formData.install == 'doing'" >安装中</el-button>
           <el-button type="info" v-if="formData.install == 'uninstall'">卸载中</el-button>
           <el-button type="info" @click="handleUninstall"  v-if="formData.install == 'finish'" >卸载</el-button>
+          <el-button type="info" @click="setdefault"  v-if="formData.install == 'finish'" >重置</el-button>
           <div>
             <el-button @click="dialogVisible = false">取消</el-button>
             <el-button type="primary" @click="submitForm">确认</el-button>
@@ -482,6 +483,20 @@ const handleAdd = () => {
     install:"wait"
   })
 }
+const setdefault = async () => {
+  if (!formRef.value) return;
+  try {
+    // 修复：如果是新增操作，移除 id 字段
+    const hostData: Host = {
+      ...formData,
+      status: 'offline'
+    };
+    formData.install = "wait";
+  } catch (error) {
+    console.error('操作失败:', error);
+    ElMessage.error('操作失败');
+  }
+};
 
 const handleEdit = (row: Host) => {
   isEdit.value = true
