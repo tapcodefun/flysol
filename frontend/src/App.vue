@@ -1009,9 +1009,7 @@ const handlePrivateKey = async (row: any) => {
     ElMessage.info('正在连接并获取私钥文件...')
     const privateKey = await UploadPrivatekey(row.ip, row.username, row.password, row.port+'')
     if (!privateKey.includes('失败')) {
-      const privatekey = privateKey
-      console.log(privatekey)
-      ElMessage.success('私钥文件下载成功,请在控制台查看')
+      ElMessage.success('私钥文件已下载到桌面')
     } else {
       ElMessage.error(privateKey)
     }
