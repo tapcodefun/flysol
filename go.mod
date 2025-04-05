@@ -6,7 +6,7 @@ toolchain go1.23.4
 
 require (
 	github.com/pkg/sftp v1.13.9
-	github.com/wailsapp/wails/v2 v2.10.1
+	github.com/wailsapp/wails/v2 v2.9.3
 	golang.org/x/crypto v0.33.0
 	k8s.io/apimachinery v0.32.2
 	sigs.k8s.io/yaml v1.4.0
