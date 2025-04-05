@@ -1,3 +1,8 @@
 build/bin
 node_modules
 frontend/dist
+goagent/agent
+goagent/dist
+vueagent/dist
+*.DS_Store
+vueagent/agent
