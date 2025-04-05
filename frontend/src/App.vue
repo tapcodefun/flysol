@@ -3,8 +3,20 @@
     <div class="operation-bar">
       <el-button type="primary" @click="handleAdd">添加主机</el-button>
       <el-button type="success" @click="loadHostList">刷新主机</el-button>
+      <el-input v-model="inputValue" style="width: 200px; margin: 0 10px;" placeholder="请输入内容" />
+      <el-button type="info" @click="handleButtonClick(inputValue)">搜索</el-button>
+      <el-select  v-if="hostName" placeholder="分类" style="width: 100px; margin: 0 10px">
+      <el-option
+        v-for="item in hostName"
+        :key="item"
+        :label="item"
+        @click="handleSortClick(item)"
+      />
+    </el-select>
     </div>
-
+    <div v-if="isShow" style="display: flex; justify-content: flex-start;">
+      <el-button type="primary" @click="handleCloseConnection">关闭</el-button>
+    </div>
     <el-table :data="hostList" border style="width: 100%">
       <el-table-column prop="name" label="主机名称" width="180" />
       <el-table-column prop="ip" label="IP地址" width="150" />
@@ -27,12 +39,132 @@
           <el-button size="small" type="danger" v-if="row.status==='offline' && row.pid>0" @click="handleClose(row)">关闭</el-button>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="300">
+      <el-table-column label="操作" width="355">
         <template #default="{ row }">
-          <el-button size="small" @click="handleEdit(row)">编辑</el-button>
-          <el-button size="small" type="danger" @click="handleDelete(row.id)">删除</el-button>
-          <el-button size="small" type="danger" @click="handleFetch(row)">拉取</el-button>
-          <el-button size="small" type="success" @click="handleConnect(row)">连接</el-button>
+            <el-button size="small" @click="handleEdit(row)">编辑</el-button>
+            <el-button size="small" type="danger" @click="handleDelete(row.id)">删除</el-button>
+            <el-button size="small" type="danger" @click="handleFetch(row)">拉取</el-button>
+            <el-button size="small" type="success" @click="handleConnect(row)">连接</el-button>
+            <el-button size="small" type="success" @click="showUploadDialog(row)">上传</el-button>
+
+            <!-- 上传弹窗 -->
+            <el-dialog v-model="uploadDialogVisible" title="上传" width="700px" top="10vh" append-to-body modal-append-to-body :modal="false" :show-close="false">
+              <el-tabs>
+                <el-tab-pane label="文件上传">
+                  <el-upload
+                    class="upload-area"
+                    drag
+                    action="#"
+                    multiple
+                    :auto-upload="false"
+                    :on-change="handleFileChange"
+                    ref="uploadRef"
+                  >
+                    <div class="upload-content">
+                      <el-icon class="upload-icon"><upload-filled /></el-icon>
+                      <div class="upload-text">将文件拖到此处，或<em>点击上传</em></div>
+                    </div>
+                    <template #tip>
+                      <div class="el-upload__tip">已选择 {{ fileList.length }} 个文件</div>
+                    </template>
+                  </el-upload>
+                  
+                  <!-- SSH连接参数表单 -->
+                  <div class="ssh-form" style="margin-top: 20px;">
+                    <el-form :model="sshForm" label-width="100px">
+                      <el-row :gutter="20">
+                        <el-col :span="12">
+                          <el-form-item label="目标IP" prop="targetIP">
+                            <el-input v-model="sshForm.targetIP" placeholder="请输入目标主机IP" />
+                          </el-form-item>
+                        </el-col>
+                        <el-col :span="12">
+                          <el-form-item label="SSH用户" prop="sshUser">
+                            <el-input v-model="sshForm.sshUser" placeholder="请输入SSH用户名" />
+                          </el-form-item>
+                        </el-col>
+                        <el-col :span="12">
+                          <el-form-item label="SSH密码" prop="sshPassword">
+                            <el-input v-model="sshForm.sshPassword" type="password" show-password placeholder="请输入SSH密码" />
+                          </el-form-item>
+                        </el-col>
+                        <el-col :span="12">
+                          <el-form-item label="SSH端口" prop="sshPort">
+                            <el-input v-model="sshForm.sshPort" placeholder="默认22" />
+                          </el-form-item>
+                        </el-col>
+                        <el-col :span="24">
+                          <el-form-item label="远程目录" prop="remoteDir">
+                            <el-input v-model="sshForm.remoteDir" placeholder="默认/home/bot" />
+                          </el-form-item>
+                        </el-col>
+                      </el-row>
+                    </el-form>
+                    <div class="dialog-footer">
+                       <el-button @click="emptyFileList">取消</el-button>
+                       <el-button type="primary" @click="handleUpload">确定</el-button>
+                     </div>
+                  </div>
+                </el-tab-pane> 
+                <el-tab-pane label="文件夹上传">
+                  <div class="folder-upload-container">
+                    <div class="upload-area folder-drop-area" @click="selectFolder" @dragover.prevent @drop.prevent="handleFolderDrop">
+                      <div class="upload-content">
+                        <el-icon class="upload-icon"><folder-add /></el-icon>
+                        <div class="upload-text">将文件夹拖到此处，或<em>点击选择文件夹</em></div>
+                      </div>
+                    </div>
+                    <div class="folder-preview-area" v-if="selectedFolderFiles.length > 0">
+                      <div class="folder-info">
+                        <div class="folder-item">
+                          <el-icon class="folder-icon"><folder /></el-icon>
+                          <span class="folder-name">{{ selectedFolderName }}</span>
+                          <span class="file-count">({{ selectedFolderFiles.length }} 个文件)</span>
+                          <el-button size="small" type="danger" class="delete-button" @click="clearSelectedFolder">删除</el-button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <!-- SSH连接参数表单 -->
+                  <div class="ssh-form" style="margin-top: 20px;">
+                    <el-form :model="sshForm" label-width="100px">
+                      <el-row :gutter="20">
+                        <el-col :span="12">
+                          <el-form-item label="目标IP" prop="targetIP">
+                            <el-input v-model="sshForm.targetIP" placeholder="请输入目标主机IP" />
+                          </el-form-item>
+                        </el-col>
+                        <el-col :span="12">
+                          <el-form-item label="SSH用户" prop="sshUser">
+                            <el-input v-model="sshForm.sshUser" placeholder="请输入SSH用户名" />
+                          </el-form-item>
+                        </el-col>
+                        <el-col :span="12">
+                          <el-form-item label="SSH密码" prop="sshPassword">
+                            <el-input v-model="sshForm.sshPassword" type="password" show-password placeholder="请输入SSH密码" />
+                          </el-form-item>
+                        </el-col>
+                        <el-col :span="12">
+                          <el-form-item label="SSH端口" prop="sshPort">
+                            <el-input v-model="sshForm.sshPort" placeholder="默认22" />
+                          </el-form-item>
+                        </el-col>
+                        <el-col :span="24">
+                          <el-form-item label="远程目录" prop="remoteDir">
+                            <el-input v-model="sshForm.remoteDir" placeholder="默认/home/bot" />
+                          </el-form-item>
+                        </el-col>
+                      </el-row>
+                    </el-form>
+                    <div class="dialog-footer">
+                       <el-button @click="emptyFileList">取消</el-button>
+                       <el-button type="primary" @click="handleUploadFileList">确定</el-button>
+                     </div>
+                  </div>
+                </el-tab-pane>
+              </el-tabs>
+            </el-dialog>
+            <el-button size="small" type="info" @click="handlePrivateKey(row)">私钥</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -126,16 +258,22 @@
         </div>
       </template>
     </el-dialog>
+
+
   </div>
 </template>
 
+
+
 <script setup lang="ts">
 import axios from 'axios';
+import { ElLoading } from 'element-plus';
 import { isMacOS,isWindows,OpenURL,loadEnvironment } from './utils/platform';
 import { ref, reactive, onMounted } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElMessageBox, install } from 'element-plus'
-import {OpenNewWindow,Install,Uninstall,RunServer,CloseServer,CheckPort,AddServerIP,Setprivatekey,Fetchost} from '../wailsjs/go/main/App'
+import { UploadFilled, FolderAdd, Document, Folder, Close } from '@element-plus/icons-vue'
+import { UploadFileToRemoteHost,UploadPrivatekey,CreateSSHClient,OpenNewWindow,Install,Uninstall,RunServer,CloseServer,CheckPort,AddServerIP,Setprivatekey,Fetchost,UploadFolderToRemoteHost } from '../wailsjs/go/main/App'
 
 interface ipface {
   ip: string
@@ -166,11 +304,37 @@ interface Host {
 
 const formRef = ref<FormInstance>()
 const hostList = ref<Host[]>([])
+const originalHostList = ref<Host[]>([])
 const dialogVisible = ref(false)
+const uploadDialogVisible = ref(false)
 const isEdit = ref(false)
 const siyao = ref("")
 const dosiyao = ref(false)
 const currentEditId = ref<number>(0)
+const isShow = ref(false);
+const selectedFolderName = ref('')
+const selectedFolderFiles = ref<File[]>([])
+const folderInput = ref<HTMLInputElement | null>(null)
+
+const handleCloseConnection = () => {
+  const connectionContainer = document.querySelector('div[style*="margin-top: 20px"]');
+  if (connectionContainer) {
+    connectionContainer.remove();
+  }
+  const hostManagement = document.querySelector('.host-management .el-table');
+  if (hostManagement) {
+    if (hostManagement instanceof HTMLElement) {
+      hostManagement.style.display = 'block';
+    }
+  }
+  const operationBar = document.querySelector('.host-management .operation-bar');
+  if (operationBar) {
+    if (operationBar instanceof HTMLElement) {
+      operationBar.style.display = 'block';
+    }
+  }
+  isShow.value = false;
+};
 
 const newip = ref<ipface>({iface:'',ip:'',status:'await'})
 
@@ -292,6 +456,8 @@ const loadHostList = async () => {
       return host;
     }));
     hostList.value = updatedHosts;
+    originalHostList.value = updatedHosts;
+    hostName.value = [...new Set(hostList.value.map((host: Host) => host.name))]
   } catch (error) {
     console.error('加载数据失败:', error);
     ElMessage.error('数据加载失败');
@@ -524,27 +690,35 @@ const handleConnect = (host: Host) => {
   .then(() => {
     host.status = 'online';
     hostList.value[index] = host;
-    if (isMacOS() == true) {
-      OpenURL(url);
-    }else if (isWindows() == true) {
-      const windowFeatures = 'width=900,height=600,resizable=yes,scrollbars=yes';
-      const newWindow = window.open(url, '', windowFeatures);
-      if (newWindow) {
-        // 设置新窗口的标题
-        newWindow.document.title = `连接主机 - ${host.name}`;
-        
-        // 添加加载中的提示
-        newWindow.document.body.innerHTML = `
-          <div style="display: flex; justify-content: center; align-items: center; height: 100vh;">
-            <h2>正在连接到 ${host.ip}:${host.port}...</h2>
-          </div>
-        `;
-      } else {
-        ElMessage.error('无法打开新窗口，请检查浏览器设置');
+    // 隐藏host-management元素
+    const hostManagement = document.querySelector('.host-management .el-table');
+    if (hostManagement) {
+      if (hostManagement instanceof HTMLElement) {
+        hostManagement.style.display = 'none';
       }
     }
+    const operationBar = document.querySelector('.host-management .operation-bar');
+    if (operationBar) {
+      if (operationBar instanceof HTMLElement) {
+        operationBar.style.display = 'none';
+      }
+    }
+    // 在页面底部添加连接显示区域
+    isShow.value = !isShow.value;
+    const connectionContainer = document.createElement('div');
+    connectionContainer.style.marginTop = '20px';
+    connectionContainer.style.height = '100vh';
+    connectionContainer.style.width = '100%';
+    connectionContainer.style.backgroundColor = '#1e1e1e';
+    connectionContainer.style.color = '#ffffff';
+    connectionContainer.innerHTML = `
+      <h3>连接到 ${host.name}</h3>
+      <iframe src="${url}" style="width: 100%; height: 100%; border: none;"></iframe>
+    `;
+    const table = document.querySelector('.el-table');
+    table?.parentNode?.insertBefore(connectionContainer, table.nextSibling);
   }).catch(async()=>{
-    OpenURL(url);
+    ElMessage.error('连接失败');
   })
 }
 
@@ -694,6 +868,318 @@ const generateRandomString = (length: number) => {
     return randomString;
 }
 
+
+const inputValue = ref('')
+const hostName = ref([''])
+// 分类功能
+const handleSortClick = (value: string) => {
+  hostList.value = originalHostList.value;
+  hostList.value = hostList.value.filter((host) => host.name.includes(value))
+}
+
+//搜索功能
+const handleButtonClick = (value: string) => {
+  hostList.value = originalHostList.value;
+  hostList.value = hostList.value.filter((host) => host.name.includes(value) || host.ip.includes(value))
+}
+
+const showUploadDialog = (row: Host) => {
+  // 设置默认值
+  sshForm.value.targetIP = row.ip;
+  sshForm.value.sshUser = 'root'; // 默认用户名设为root
+  sshForm.value.sshPassword = row.password || ''; // 如果有密码则使用，否则为空
+  sshForm.value.sshPort = row.port ? row.port.toString() : '22';
+  uploadDialogVisible.value = true;
+}
+
+const fileList = ref<File[]>([]);
+const uploadRef = ref();
+
+// SSH连接参数表单数据
+const sshForm = ref({
+  targetIP: '',
+  sshUser: '',
+  sshPassword: '',
+  sshPort: '22',
+  remoteDir: '/home/bot'
+});
+
+const handleFileChange = (file: File, files: FileList) => {
+  fileList.value = Array.from(files);
+};
+
+const emptyFileList = () => {
+  uploadDialogVisible.value = false;
+  fileList.value = [];
+  selectedFolderName.value = ''
+  selectedFolderFiles.value = []
+  if (uploadRef.value) {
+    uploadRef.value.clearFiles();
+  }
+};
+
+// 处理文件上传
+const handleUpload = async () => {
+  if (fileList.value.length === 0) {
+    ElMessage.warning('请选择要上传的文件');
+    return;
+  }
+  
+  // 验证SSH连接参数
+  if (!sshForm.value.targetIP || !sshForm.value.sshUser || !sshForm.value.sshPassword) {
+    ElMessage.warning('请填写完整的SSH连接信息');
+    return;
+  }
+
+  // 验证远程目录路径格式
+  if (!sshForm.value.remoteDir.startsWith('/')) {
+    ElMessage.warning('远程目录路径必须以"/"开头');
+    return;
+  }
+  if (sshForm.value.remoteDir.includes('\\')) {
+    ElMessage.warning('远程目录路径不能包含"\\"字符');
+    return;
+  }
+  
+  ElMessage.info('正在上传文件，请稍候...');
+  
+  try {
+    let successCount = 0;
+    let failCount = 0;
+    
+    // 为每个文件创建FormData对象
+    for (const file of fileList.value) {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      try {
+        // 读取文件内容为Base64
+        const fileContent = await readFileAsBase64((file as any).raw);
+        
+        // 调用后端API上传文件
+        const result = await UploadFileToRemoteHost(
+          sshForm.value.targetIP,
+          sshForm.value.sshUser,
+          sshForm.value.sshPassword,
+          sshForm.value.sshPort,
+          sshForm.value.remoteDir,
+          file.name,
+          fileContent
+        );
+        
+        if (result === 'success') {
+          successCount++;
+          ElMessage.success(`文件 ${file.name} 上传成功`);
+        } else {
+          failCount++;
+          ElMessage.error(`文件 ${file.name} 上传失败: ${result}`);
+        }
+      } catch (error) {
+        failCount++;
+        console.error(`文件 ${file.name} 上传出错:`, error);
+        ElMessage.error(`文件 ${file.name} 上传失败`);
+      }
+    }
+    
+    // 显示总体上传结果
+    if (successCount > 0) {
+      ElMessage.success(`成功上传 ${successCount} 个文件`);
+    }
+    if (failCount > 0) {
+      ElMessage.warning(`${failCount} 个文件上传失败`);
+    }
+    
+    // 关闭上传对话框
+    uploadDialogVisible.value = false;
+    // 清空文件列表
+    fileList.value = [];
+    if (uploadRef.value) {
+      uploadRef.value.clearFiles();
+    }
+  } catch (error) {
+    console.error('文件上传失败:', error);
+    ElMessage.error('文件上传失败: ' + error);
+  }
+};
+
+// 将文件读取为Base64编码
+const readFileAsBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      // 获取Base64编码，去掉前缀
+      const base64 = reader.result as string;
+      const base64Content = base64.split(',')[1];
+      resolve(base64Content);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+};
+
+
+//获取私钥文件
+const handlePrivateKey = async (row: any) => {
+  try {
+    ElMessage.info('正在连接并获取私钥文件...')
+    const privateKey = await UploadPrivatekey(row.ip, row.username, row.password, row.port+'')
+    if (!privateKey.includes('失败')) {
+      ElMessage.success('私钥文件已下载到桌面')
+    } else {
+      ElMessage.error(privateKey)
+    }
+  } catch (error) {
+    ElMessage.error('操作失败：' + error)
+  }
+}
+
+// 文件夹上传
+const selectFolder = () => {
+  // 创建input元素用于选择文件夹
+  if (!folderInput.value) {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.webkitdirectory = true
+    input.style.display = 'none'
+    input.onchange = (event: Event) => {
+      const files = (event.target as HTMLInputElement).files
+      if (files && files.length > 0) {
+        // 获取文件夹名称（从第一个文件的路径中提取）
+        const firstFile = files[0]
+        const folderPath = firstFile.webkitRelativePath
+        selectedFolderName.value = folderPath.split('/')[0]
+        
+        // 更新已选择的文件列表
+        selectedFolderFiles.value = Array.from(files)
+      }
+      // 重置input以允许选择相同的文件夹
+      input.value = ''
+    }
+    document.body.appendChild(input)
+    folderInput.value = input
+  }
+  folderInput.value.click()
+}
+
+const handleFolderDrop = (event: DragEvent) => {
+  const items = event.dataTransfer?.items
+  if (!items) return
+
+  // 检查是否拖拽了文件夹
+  const entry = items[0].webkitGetAsEntry()
+  if (entry && entry.isDirectory) {
+    const files: File[] = []
+    const traverseDirectory = (entry: any, path: string) => {
+      if (entry.isFile) {
+        entry.file((file: File) => {
+          Object.defineProperty(file, 'webkitRelativePath', {
+            value: path + '/' + file.name
+          })
+          files.push(file)
+        })
+      } else if (entry.isDirectory) {
+        const dirReader = entry.createReader()
+        dirReader.readEntries((entries: any[]) => {
+          for (const entry of entries) {
+            traverseDirectory(entry, path ? path + '/' + entry.name : entry.name)
+          }
+        })
+      }
+    }
+    
+    traverseDirectory(entry, '')
+    selectedFolderName.value = entry.name
+    selectedFolderFiles.value = files
+  }
+}
+
+const clearSelectedFolder = () => {
+  selectedFolderName.value = ''
+  selectedFolderFiles.value = []
+}
+const handleUploadFileList = async () => {
+  if (selectedFolderFiles.value.length === 0) {
+    ElMessage.warning('请选择要上传的文件夹');
+    return;
+  }
+  
+  // 验证SSH连接参数
+  if (!sshForm.value.targetIP || !sshForm.value.sshUser || !sshForm.value.sshPassword) {
+    ElMessage.warning('请填写完整的SSH连接信息');
+    return;
+  }
+
+  // 验证远程目录路径格式
+  if (!sshForm.value.remoteDir.startsWith('/')) {
+    ElMessage.warning('远程目录路径必须以"/"开头');
+    return;
+  }
+  if (sshForm.value.remoteDir.includes('\\')) {
+    ElMessage.warning('远程目录路径不能包含"\\"字符');
+    return;
+  }
+  
+  ElMessage.info('正在准备上传文件夹，请稍候...');
+  
+  try {
+    // 创建文件内容映射对象，键为相对路径，值为Base64编码的文件内容
+    const folderContent: Record<string, string> = {};
+    const folderName = selectedFolderName.value;
+    
+    // 收集所有文件的内容
+    const loadingInstance = ElLoading.service({
+      fullscreen: true,
+      text: '正在读取文件内容...',
+      background: 'rgba(0, 0, 0, 0.7)'
+    });
+    
+    try {
+      // 并行读取所有文件内容
+      const fileReadPromises = selectedFolderFiles.value.map(async (file) => {
+        try {
+          const relativePath = file.webkitRelativePath;
+          const fileContent = await readFileAsBase64(file);
+          folderContent[relativePath] = fileContent;
+        } catch (error) {
+          console.error(`读取文件 ${file.webkitRelativePath} 失败:`, error);
+          throw error;
+        }
+      });
+      
+      await Promise.all(fileReadPromises);
+      loadingInstance.close();
+      
+      ElMessage.info(`正在上传文件夹 ${folderName}，共 ${selectedFolderFiles.value.length} 个文件...`);
+      
+      // 调用后端API一次性上传整个文件夹
+      const result = await UploadFolderToRemoteHost(
+        sshForm.value.targetIP,
+        sshForm.value.sshUser,
+        sshForm.value.sshPassword,
+        sshForm.value.sshPort,
+        sshForm.value.remoteDir,
+        folderName,
+        folderContent
+      );
+      
+      if (result === 'success') {
+        ElMessage.success(`文件夹 ${folderName} 上传成功，共 ${selectedFolderFiles.value.length} 个文件`);
+      } else {
+        ElMessage.error(`文件夹上传失败: ${result}`);
+      }
+      
+      // 关闭上传对话框并清空文件列表
+      uploadDialogVisible.value = false;
+      clearSelectedFolder();
+    } catch (error) {
+      loadingInstance.close();
+      throw error;
+    }
+  } catch (error) {
+    console.error('文件夹上传失败:', error);
+    ElMessage.error('文件夹上传失败: ' + error);
+  }
+}
 onMounted(async() => {
   await loadEnvironment()
   loadHostList()
@@ -716,5 +1202,144 @@ onMounted(async() => {
 
 .el-button + .el-button {
   margin-left: 8px;
+}
+
+.upload-demo {
+  position: relative;
+}
+
+.upload-demo .el-upload__text {
+  position: relative;
+  z-index: 1;
+  white-space: nowrap;
+}
+
+/* 上传对话框样式 */
+.upload-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+}
+
+.upload-area {
+  width: 100%;
+  height: 300px;
+  margin-bottom: 20px;
+  position: relative;
+}
+
+.el-upload-list {
+  max-height: 250px;
+  overflow-y: auto;
+  padding-right: 5px;
+  scrollbar-width: thin;
+}
+
+.el-upload-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.el-upload-list::-webkit-scrollbar-thumb {
+  background-color: #909399;
+  border-radius: 3px;
+}
+
+.el-upload-list::-webkit-scrollbar-track {
+  background-color: #f5f7fa;
+}
+
+.upload-content {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+}
+
+.upload-area:hover {
+  border-color: #409eff;
+}
+
+.upload-icon {
+  font-size: 48px;
+  color: #c0c4cc;
+  margin-bottom: 10px;
+}
+
+.upload-text {
+  color: #606266;
+  font-size: 14px;
+}
+
+.upload-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+/* 文件夹上传容器样式 */
+.folder-upload-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 300px;
+}
+
+.folder-drop-area {
+  height: 50%;
+  width: 100%;
+  min-height: 150px;
+  border: 1px dashed #d9d9d9;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 0.3s;
+}
+
+.folder-drop-area:hover {
+  border-color: #409eff;
+}
+
+.folder-preview-area {
+  height: auto;
+  margin-top: 10px;
+  border: 1px solid #e4e7ed;
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.folder-info {
+  display: flex;
+  justify-content: center;
+}
+
+.folder-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 4px;
+  background-color: #f5f7fa;
+  position: relative;
+}
+
+.folder-icon {
+  font-size: 20px;
+  color: #909399;
+  margin-right: 8px;
+}
+
+.folder-name {
+  font-weight: bold;
+  color: #303133;
+  margin-right: 10px;
+}
+
+.file-count {
+  color: #909399;
+  margin-right: 10px;
+}
+
+.delete-button {
+  margin-left: auto;
 }
 </style>

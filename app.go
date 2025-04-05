@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,9 +14,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 	"k8s.io/apimachinery/pkg/util/rand"
 	yaml "sigs.k8s.io/yaml/goyaml.v2"
+	"runtime"
+	// "os/exec"
 )
 
 // App struct
@@ -368,7 +372,7 @@ func scpUpload(client *ssh.Client, localPath string, remotePath string) error {
 		fmt.Fprint(w, "\x00")
 	}()
 
-	return session.Run(fmt.Sprintf("scp -t %s", remotePath))
+	return session.Run(fmt.Sprintf("scp -t -f %s", remotePath))
 }
 func (a *App) AddServerIP(sshhost string, sshpassword string, newip string, iface string, sshuser string, sshport string, private_key string) string {
 	// 连接到远程服务器
@@ -723,4 +727,394 @@ func (a *App) RunServer(sshhost string, token string, sshpassword string, sshuse
 		startStdout.String(), startStderr.String(),
 	)
 	return logs
+}
+
+// 创建并返回一个SSH客户端
+func (a *App) CreateSSHClient(host string, user string, password string, port string) (*ssh.Client, error) {
+	// 检查是否是私钥认证
+	var authMethod ssh.AuthMethod
+	if strings.HasPrefix(password, "-----BEGIN") {
+		// 尝试解析私钥
+		signer, err := ssh.ParsePrivateKey([]byte(password))
+		if err != nil {
+			// 如果解析失败，尝试使用空密码解析带密码的私钥
+			signer, err = ssh.ParsePrivateKeyWithPassphrase([]byte(password), []byte(""))
+			if err != nil {
+				// 如果仍然失败，则返回错误
+				return nil, fmt.Errorf("无法解析私钥: %v", err)
+			}
+		}
+		authMethod = ssh.PublicKeys(signer)
+	} else {
+		// 使用密码认证
+		authMethod = ssh.Password(password)
+	}
+
+	// 创建SSH配置
+	config := &ssh.ClientConfig{
+		User: user,
+		Auth: []ssh.AuthMethod{authMethod},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:        time.Second * 5,
+	}
+
+	// 建立SSH连接
+	return ssh.Dial("tcp", fmt.Sprintf("%s:%s", host, port), config)
+}
+
+// TransferFile 接收前端传来的文件内容，通过SSH连接上传到指定主机路径
+// func (a *App) TransferFile(sshhost string, sshuser string, sshpassword string, sshport string, fileContent string, remotePath string) string {
+// 	// 创建SSH连接
+// 	client, err := sshClient(sshhost, sshpassword, sshuser, sshport)
+// 	if err != nil {
+// 		return fmt.Sprintf("SSH连接失败: %v", err)
+// 	}
+// 	defer client.Close()
+
+// 	// 创建临时文件存储前端传来的文件内容
+// 	tmpFile := filepath.Join(os.TempDir(), "transfer_tmp_"+rand.String(8))
+
+// 	// 确保目录存在
+// 	dir := filepath.Dir(tmpFile)
+// 	if err := os.MkdirAll(dir, 0755); err != nil {
+// 		return fmt.Sprintf("创建临时目录失败: %v", err)
+// 	}
+
+// 	// 写入文件内容到临时文件
+// 	if err := os.WriteFile(tmpFile, []byte(fileContent), 0644); err != nil {
+// 		return fmt.Sprintf("创建临时文件失败: %v", err)
+// 	}
+
+// 	// 确保临时文件在使用后被删除
+// 	defer os.Remove(tmpFile)
+
+// 	// 上传文件到远程服务器
+// 	err = scpUpload(client, tmpFile, remotePath)
+// 	if err != nil {
+// 		return fmt.Sprintf("文件上传失败: %v", err)
+// 	}
+
+// 	return "success"
+// }
+
+// uploadPrivatekey 从远程主机获取私钥文件内容
+// UploadFileToRemoteHost 将文件上传到远程主机
+// scpUpload 通过 SCP 上传文件到远程服务器
+func scpupload(client *ssh.Client, localPath string, remotePath string) error {
+	session, err := client.NewSession()
+	if err != nil {
+		return err
+	}
+	defer session.Close()
+
+	// 读取本地文件
+	file, err := os.Open(localPath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	// 获取文件信息
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return err
+	}
+
+	// 通过 SCP 上传文件
+	go func() {
+		w, _ := session.StdinPipe()
+		defer w.Close()
+		fmt.Fprintln(w, "C0644", fileInfo.Size(), filepath.Base(remotePath))
+		io.Copy(w, file)
+		fmt.Fprint(w, "\x00")
+	}()
+	return session.Run(fmt.Sprintf("scp -t %s", filepath.ToSlash(remotePath)))
+}
+
+func (a *App) UploadFileToRemoteHost(host string, user string, password string, port string, remoteDir string, fileName string, fileContent string) string {
+	// 连接到远程服务器
+	client, err := sshClient(host, "", password, user, port)
+	if err != nil {
+		return fmt.Sprintf("SSH连接失败: %v", err)
+	}
+	defer client.Close()
+
+	// 创建临时文件
+	tmpFile := filepath.Join(os.TempDir(), fileName)
+	
+	// 解码Base64内容
+	decoded, err := base64.StdEncoding.DecodeString(fileContent)
+	if err != nil {
+		return fmt.Sprintf("文件解码失败: %v", err)
+	}
+	
+	// 写入临时文件
+	err = os.WriteFile(tmpFile, decoded, 0644)
+	if err != nil {
+		return fmt.Sprintf("临时文件创建失败: %v", err)
+	}
+	defer os.Remove(tmpFile) // 确保临时文件被删除
+
+	// 确保远程目录存在
+	remoteDirCmd := fmt.Sprintf("mkdir -p %s", remoteDir)
+	session, err := client.NewSession()
+	if err != nil {
+		return fmt.Sprintf("创建SSH会话失败: %v", err)
+	}
+	_, err = session.CombinedOutput(remoteDirCmd)
+	session.Close()
+	if err != nil {
+		return fmt.Sprintf("创建远程目录失败: %v", err)
+	}
+
+	// 构建远程文件路径并转换为Linux风格的路径
+	remotePath := filepath.ToSlash(filepath.Join(remoteDir, fileName))
+	fmt.Printf("文件路径：%v\n", remotePath)
+	
+	// 上传文件
+	err = scpupload(client, tmpFile, remotePath)
+	if err != nil {
+		return fmt.Sprintf("文件上传失败: %v", err)
+	}
+
+	return "success"
+}
+
+// UploadFolderToRemoteHost 上传文件夹到远程主机，保持目录结构
+func (a *App) UploadFolderToRemoteHost(host string, user string, password string, port string, remoteDir string, folderPath string, folderContent map[string]string) string {
+	// 连接到远程服务器
+	client, err := sshClient(host, "", password, user, port)
+	if err != nil {
+		return fmt.Sprintf("SSH连接失败: %v", err)
+	}
+	defer client.Close()
+
+	// 创建临时目录用于存放解码后的文件
+	tempDir := filepath.Join(os.TempDir(), fmt.Sprintf("upload_%d", time.Now().UnixNano()))
+	err = os.MkdirAll(tempDir, 0755)
+	if err != nil {
+		return fmt.Sprintf("创建临时目录失败: %v", err)
+	}
+	defer os.RemoveAll(tempDir) // 确保临时目录被删除
+
+	// 确保远程根目录存在
+	remoteDirCmd := fmt.Sprintf("mkdir -p %s", remoteDir)
+	session, err := client.NewSession()
+	if err != nil {
+		return fmt.Sprintf("创建SSH会话失败: %v", err)
+	}
+	_, err = session.CombinedOutput(remoteDirCmd)
+	session.Close()
+	if err != nil {
+		return fmt.Sprintf("创建远程根目录失败: %v", err)
+	}
+
+	// 遍历文件内容映射
+	for relativePath, fileContent := range folderContent {
+		// 构建本地临时文件路径
+		localFilePath := filepath.Join(tempDir, relativePath)
+		localDir := filepath.Dir(localFilePath)
+
+		// 确保本地临时目录存在
+		err = os.MkdirAll(localDir, 0755)
+		if err != nil {
+			return fmt.Sprintf("创建本地临时子目录失败: %v", err)
+		}
+
+		// 解码Base64内容
+		decoded, err := base64.StdEncoding.DecodeString(fileContent)
+		if err != nil {
+			return fmt.Sprintf("文件解码失败 %s: %v", relativePath, err)
+		}
+
+		// 写入临时文件
+		err = os.WriteFile(localFilePath, decoded, 0644)
+		if err != nil {
+			return fmt.Sprintf("临时文件创建失败 %s: %v", relativePath, err)
+		}
+
+		// 构建远程目录路径
+		remoteFileDir := filepath.ToSlash(filepath.Join(remoteDir, filepath.Dir(relativePath)))
+
+		// 确保远程子目录存在
+		if filepath.Dir(relativePath) != "." {
+			remoteDirCmd := fmt.Sprintf("mkdir -p %s", remoteFileDir)
+			session, err := client.NewSession()
+			if err != nil {
+				return fmt.Sprintf("创建SSH会话失败: %v", err)
+			}
+			_, err = session.CombinedOutput(remoteDirCmd)
+			session.Close()
+			if err != nil {
+				return fmt.Sprintf("创建远程子目录失败 %s: %v", remoteFileDir, err)
+			}
+		}
+
+		// 构建远程文件路径并转换为Linux风格的路径
+		remotePath := filepath.ToSlash(filepath.Join(remoteDir, relativePath))
+		fmt.Printf("上传文件：%s -> %s\n", relativePath, remotePath)
+
+		// 上传文件
+		err = scpupload(client, localFilePath, remotePath)
+		if err != nil {
+			return fmt.Sprintf("文件上传失败 %s: %v", relativePath, err)
+		}
+	}
+
+	return "success"
+}
+
+// func (a *App) UploadPrivatekey(host string, user string, password string, port string) string {
+// 	// 检查是否是私钥认证
+// 	var client *ssh.Client
+// 	var err error
+	
+// 	// 使用密码认证
+// 	client, err = a.CreateSSHClient(host, user, password, port)
+	
+// 	if err != nil {
+// 		return fmt.Sprintf("SSH连接失败: %v", err)
+// 	}
+// 	defer client.Close()
+
+// 	// 创建新的会话来读取文件
+// 	session, err := client.NewSession()
+// 	if err != nil {
+// 		return fmt.Sprintf("创建SSH会话失败: %v", err)
+// 	}
+// 	defer session.Close()
+
+// 	// 使用scp命令下载私钥文件到本地桌面
+// 	desktopPath := filepath.Join(os.Getenv("USERPROFILE"), "Desktop")
+// 	localFilePath := filepath.Join(desktopPath, "PRIVATE_KEY")
+	
+// 	// 构建scp命令
+// 	scpCmd := fmt.Sprintf("scp -f /home/bot/PRIVATE_KEY")
+	
+// 	// 创建本地文件
+// 	localFile, err := os.Create(localFilePath)
+// 	if err != nil {
+// 		return fmt.Sprintf("创建本地文件失败: %v", err)
+// 	}
+// 	defer localFile.Close()
+	
+// 	// 设置会话的标准输入输出
+// 	stdin, err := session.StdinPipe()
+// 	if err != nil {
+// 		return fmt.Sprintf("获取stdin失败: %v", err)
+// 	}
+	
+// 	stdout, err := session.StdoutPipe()
+// 	if err != nil {
+// 		return fmt.Sprintf("获取stdout失败: %v", err)
+// 	}
+	
+// 	// 启动scp命令
+// 	if err := session.Start(scpCmd); err != nil {
+// 		return fmt.Sprintf("启动scp命令失败: %v", err)
+// 	}
+	
+// 	// scp协议交互
+// 	// 发送确认信号
+// 	stdin.Write([]byte{0})
+
+// 	// 读取文件头信息
+// 	buffer := make([]byte, 1024)
+// 	n, err := stdout.Read(buffer)
+// 	if err != nil && err != io.EOF {
+// 		return fmt.Sprintf("读取文件头信息失败: %v", err)
+// 	}
+	
+// 	// 解析文件头信息
+// 	header := string(buffer[:n])
+// 	parts := strings.SplitN(header, " ", 3)
+// 	if len(parts) < 3 || !strings.HasPrefix(parts[0], "C") {
+// 		return fmt.Sprintf("无效的文件头信息: %s", header)
+// 	}
+	
+// 	// 发送确认信号
+// 	stdin.Write([]byte{0})
+
+// 	// 复制文件内容到本地文件
+// 	_, err = io.Copy(localFile, stdout)
+// 	fmt.Println("私")
+// 	if err != nil {
+// 		return fmt.Sprintf("复制文件内容失败: %v", err)
+// 	}
+// 	fmt.Println("私钥")
+// 	// 发送确认信号
+// 	stdin.Write([]byte{0})
+// 	fmt.Println("私钥文件")
+// 	// 等待命令完成
+// 	err = session.Wait()
+// 	if err != nil {
+// 		return fmt.Sprintf("scp命令执行失败: %v", err)
+// 	}
+// 	fmt.Println("私钥文件已成功下载到本地桌面。")
+// 	return fmt.Sprintf("私钥文件已成功下载到: %s", localFilePath)
+// }
+// func (a *App) UploadPrivatekey(host string, user string, password string, port string) string {
+// 	// 构建scp命令
+// 	desktopPath := ""
+// 	if runtime.GOOS == "windows" {
+// 		desktopPath = filepath.Join(os.Getenv("USERPROFILE"), "Desktop")
+// 	} else {
+// 		desktopPath = filepath.Join(os.Getenv("HOME"), "Desktop")
+// 	}
+// 	localFilePath := filepath.Join(desktopPath, "PRIVATE_KEY")
+// 	scpCmd := fmt.Sprintf("scp %s@%s:/home/bot/PRIVATE_KEY %s", user, host, localFilePath)
+
+// 	// 执行scp命令
+// 	cmd := exec.Command("sh", "-c", scpCmd)
+// 	output, err := cmd.CombinedOutput()
+// 	if err != nil {
+// 		return fmt.Sprintf("scp命令执行失败: %v, 输出: %s", err, string(output))
+// 	}
+// 	return fmt.Sprintf("私钥文件已成功下载到: %s", localFilePath)
+// }
+func (a *App) UploadPrivatekey(host string, user string, password string, port string) string {
+	// 获取桌面路径
+	desktopPath := ""
+	if runtime.GOOS == "windows" {
+		desktopPath = filepath.Join(os.Getenv("USERPROFILE"), "Desktop")
+	} else {
+		desktopPath = filepath.Join(os.Getenv("HOME"), "Desktop")
+	}
+	localFilePath := filepath.Join(desktopPath, "PRIVATE_KEY")
+	
+	// 创建SSH连接
+	client, err := a.CreateSSHClient(host, user, password, port)
+	if err != nil {
+		return fmt.Sprintf("SSH连接失败: %v", err)
+	}
+	defer client.Close()
+	
+	// 创建SFTP客户端
+	sftpClient, err := sftp.NewClient(client)
+	if err != nil {
+		return fmt.Sprintf("创建SFTP客户端失败: %v", err)
+	}
+	defer sftpClient.Close()
+	
+	// 打开远程文件
+	remoteFile, err := sftpClient.Open("/home/bot/PRIVATE_KEY")
+	if err != nil {
+		return fmt.Sprintf("打开远程文件失败: %v", err)
+	}
+	defer remoteFile.Close()
+	
+	// 创建本地文件
+	localFile, err := os.Create(localFilePath)
+	if err != nil {
+		return fmt.Sprintf("创建本地文件失败: %v", err)
+	}
+	defer localFile.Close()
+	
+	// 复制文件内容
+	_, err = io.Copy(localFile, remoteFile)
+	if err != nil {
+		return fmt.Sprintf("下载文件失败: %v", err)
+	}
+	
+	return fmt.Sprintf("私钥文件已成功下载到: %s", localFilePath)
 }
