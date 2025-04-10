@@ -23,7 +23,7 @@
       <el-table-column prop="category" label="分类" width="120" />
       <el-table-column prop="ip" label="IP地址" width="150" />
       <el-table-column prop="masterIP" label="主节点IP" width="150" />
-      <el-table-column prop="version" label="版本" width="100" />
+      <el-table-column prop="blockId" label="区块ID" width="120"/>
       <el-table-column prop="cpu" label="CPU" width="100" />
       <el-table-column prop="pid" label="进程" width="100">
         <template #default="{ row }">
@@ -342,7 +342,6 @@ interface Host {
   ip: string
   port: number
   username: string
-  version: string
   password?: string
   desc: string
   ips: ipface[] | ""
@@ -358,6 +357,7 @@ interface Host {
   install: 'doing' | 'finish' | 'wait' | 'uninstall'
   log:string
   category: string
+  blockId: string
 }
 
 const formRef = ref<FormInstance>()
@@ -417,7 +417,6 @@ const formData = reactive<Omit<Host, 'id' | 'status'>>({
   port: 22,
   username: 'root',
   password: '',
-  version: "1.0.5",
   desc: '',
   ips: '',
   rpc: '',
@@ -430,7 +429,8 @@ const formData = reactive<Omit<Host, 'id' | 'status'>>({
   install: "wait",
   log:'',
   category: '',
-  masterIP: ''
+  masterIP: '',
+  blockId: ''
 })
 
 const formRules = reactive<FormRules>({
@@ -518,7 +518,7 @@ const loadHostList = async () => {
         const response = await axios.get(`http://${host.ip}:5189/metrics`, {
           headers: {'Content-Type': 'application/json'},
         });
-        const content = response.data; // axios 自动解析 JSON 数据
+        const content = response.data;
         host.status = 'online';
         host.token = content.token;
         host.cpu = (content.cpu).toFixed(2) + '%';
@@ -745,6 +745,15 @@ const handleStart = async (host: Host) => {
           // 如果启动成功，停止轮询并更新状态
           ElMessage.success('启动成功');
           hostList.value[index].status = 'online';
+          // 获取区块ID
+          if (hostList.value[index].masterIP) {
+            try {
+              const blockResponse = await axios.get(`https://sol.tapcode.fun/api/solana/slot?ip=${hostList.value[index].masterIP}`);
+              hostList.value[index].blockId = blockResponse.data.data.slot;
+            } catch (err) {
+              hostList.value[index].blockId = '-';
+            }
+          }
           return;
         } else {
           // 如果未成功，增加尝试次数
@@ -781,7 +790,7 @@ const handleFetch = async () => {
   const host = formData as Host;
   const index = hostList.value.findIndex(h => h.id === host.id);
   try {
-    Fetchost(host.ip+":5189").then((res: any) => {
+    Fetchost(host.ip+":5189").then(async (res: any) => {
       var content = JSON.parse(res)
       console.log(content)
       hostList.value[index].token = content.token;
@@ -789,8 +798,18 @@ const handleFetch = async () => {
       hostList.value[index].pid = Number(content.pid) || -2;
       if(content.pid>0){
         hostList.value[index].status = 'online';
+        // 更新区块ID
+        if (hostList.value[index].masterIP) {
+          try {
+            const blockResponse = await axios.get(`https://sol.tapcode.fun/api/solana/slot?ip=${hostList.value[index].masterIP}`);
+            hostList.value[index].blockId = blockResponse.data.data.slot;
+          } catch (err) {
+            hostList.value[index].blockId = '-';
+          }
+        }
       }else{
         hostList.value[index].status = 'offline';
+        hostList.value[index].blockId = '-';
       }
     });
   } catch (error) {
@@ -1304,6 +1323,7 @@ const handleUploadFileList = async () => {
     ElMessage.error('文件夹上传失败: ' + error);
   }
 }
+
 onMounted(async() => {
   await loadEnvironment()
   loadHostList()

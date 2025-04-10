@@ -28,18 +28,15 @@ const password = ref('')
 const emit = defineEmits(['login-success'])
 
 const handleLogin = () => {
-  if(username.value === 'root' && password.value === 'root') return emit('login-success')
   axios.post('https://sol.tapcode.fun/api/solana/login', {
     username: username.value,
     password: password.value
   })
   .then(response => {
-    console.log('登录成功:', response.data)
     emit('login-success')
   })
   .catch(error => {
     ElMessage.error('用户名或密码错误')
-    console.error('登录失败:', error)
   })
 }
 </script>
