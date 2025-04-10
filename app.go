@@ -507,10 +507,11 @@ func (a *App) CheckPort(sshhost string, sshpassword string, sshuser string, sshp
 }
 
 type Host struct {
-	Token   string  `json:"token"`
-	Cpu     float64 `json:"cpu"`
-	Pid     int     `json:"pid"`
-	Version string  `json:"version"`
+	Token    string  `json:"token"`
+	Cpu      float64 `json:"cpu"`
+	Pid      int     `json:"pid"`
+	Version  string  `json:"version"`
+	MasterIp string  `json:"masterIp"`
 }
 
 func (a *App) Fetchost(sshhost string) string {

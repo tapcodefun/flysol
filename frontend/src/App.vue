@@ -1,13 +1,14 @@
 <template>
-  <div class="host-management">
+  <LoginPage v-if="!isLogin" @login-success="handleLoginSuccess" />
+  <div v-else class="host-management">
     <div class="operation-bar">
       <el-button type="primary" @click="handleAdd">添加主机</el-button>
       <el-button type="success" @click="loadHostList">刷新主机</el-button>
       <el-input v-model="inputValue" style="width: 200px; margin: 0 10px;" placeholder="请输入内容" />
       <el-button type="info" @click="handleButtonClick(inputValue)">搜索</el-button>
-      <el-select  v-if="hostName" placeholder="分类" style="width: 100px; margin: 0 10px">
+      <el-select v-model="selectedCategory" placeholder="分类" style="width: 120px; margin: 0 10px" clearable @change="filterByCategory">
       <el-option
-        v-for="item in hostName"
+        v-for="item in categories"
         :key="item"
         :label="item"
         @click="handleSortClick(item)"
@@ -19,7 +20,9 @@
     </div>
     <el-table :data="hostList" border style="width: 100%">
       <el-table-column prop="name" label="主机名称" width="180" />
+      <el-table-column prop="category" label="分类" width="120" />
       <el-table-column prop="ip" label="IP地址" width="150" />
+      <el-table-column prop="masterIP" label="主节点IP" width="150" />
       <el-table-column prop="version" label="版本" width="100" />
       <el-table-column prop="cpu" label="CPU" width="100" />
       <el-table-column prop="pid" label="进程" width="100">
@@ -42,8 +45,6 @@
       <el-table-column label="操作" width="355">
         <template #default="{ row }">
             <el-button size="small" @click="handleEdit(row)">编辑</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(row.id)">删除</el-button>
-            <el-button size="small" type="danger" @click="handleFetch(row)">拉取</el-button>
             <el-button size="small" type="success" @click="handleConnect(row)">连接</el-button>
             <el-button size="small" type="success" @click="showUploadDialog(row)">上传</el-button>
 
@@ -169,6 +170,36 @@
       </el-table-column>
     </el-table>
 
+    <!-- 自定义分类弹窗 -->
+    <el-dialog v-model="categoryDialogVisible" title="自定义分类" width="400px">
+      <el-form>
+        <el-form-item label="分类名称">
+          <el-input v-model="newCategory" placeholder="请输入分类名称" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="categoryDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="handleAddCategory">确定</el-button>
+        </div>
+      </template>
+    </el-dialog>
+
+    <!-- 自定义主节点IP弹窗 -->
+    <el-dialog v-model="masterIPDialogVisible" title="自定义主节点IP" width="400px">
+      <el-form>
+        <el-form-item label="主节点IP">
+          <el-input v-model="newMasterIP" placeholder="请输入主节点IP" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="masterIPDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="handleAddMasterIP">确定</el-button>
+        </div>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑主机' : '添加主机'" width="600px" top="10vh">
       <el-form ref="formRef" :model="formData" :rules="formRules" label-width="80px">
         <el-row :gutter="20">
@@ -212,6 +243,26 @@
               <el-input v-model="formData.desc" />
             </el-form-item>
           </el-col>
+          <el-col :span="24">
+            <el-form-item label="分类" prop="category">
+              <div style="display: flex; align-items: center;">
+                <el-select v-model="formData.category" style="width: 200px; margin-right: 10px;">
+                  <el-option v-for="cat in categories" :key="cat" :label="cat" :value="cat" />
+                </el-select>
+                <el-button type="primary" @click="categoryDialogVisible = true">自定义分类</el-button>
+              </div>
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="主节点IP" prop="masterIP">
+              <div style="display: flex; align-items: center;">
+                <el-select v-model="formData.masterIP" style="width: 200px; margin-right: 10px;">
+                  <el-option v-for="ip in masterIPs" :key="ip" :label="ip" :value="ip" />
+                </el-select>
+                <el-button type="primary" @click="masterIPDialogVisible = true">自定义主节点IP</el-button>
+              </div>
+            </el-form-item>
+          </el-col>
           <el-col  :span="24" v-if="formData.token">
             <el-form-item label="安全码" prop="token">
               <el-input v-model="formData.token" />
@@ -246,11 +297,15 @@
       </el-form>
       <template #footer>
         <div style="display: flex; justify-content: space-between; align-items: center;">
-          <el-button type="info" @click="handleTestConnection" v-if="formData.install == 'wait'" >安装插件</el-button>
-          <el-button type="info" v-if="formData.install == 'doing'" >安装中</el-button>
-          <el-button type="info" v-if="formData.install == 'uninstall'">卸载中</el-button>
-          <el-button type="info" @click="handleUninstall"  v-if="formData.install == 'finish'" >卸载</el-button>
-          <el-button type="info" @click="setdefault"  v-if="formData.install == 'finish'" >重置</el-button>
+          <div>
+            <el-button type="info" @click="handleTestConnection" v-if="formData.install == 'wait'" >安装插件</el-button>
+            <el-button type="info" v-if="formData.install == 'doing'" >安装中</el-button>
+            <el-button type="info" v-if="formData.install == 'uninstall'">卸载中</el-button>
+            <el-button type="info" @click="handleUninstall"  v-if="formData.install == 'finish'" >卸载</el-button>
+            <el-button type="info" @click="setdefault"  v-if="formData.install == 'finish'" >重置</el-button>
+            <el-button type="danger" @click="handleDelete(currentEditId)" v-if="isEdit">删除</el-button>
+            <el-button type="danger" @click="handleFetch()" v-if="isEdit">拉取</el-button>
+          </div>
           <div>
             <el-button @click="dialogVisible = false">取消</el-button>
             <el-button type="primary" @click="submitForm">确认</el-button>
@@ -274,6 +329,7 @@ import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElMessageBox, install } from 'element-plus'
 import { UploadFilled, FolderAdd, Document, Folder, Close } from '@element-plus/icons-vue'
 import { UploadFileToRemoteHost,UploadPrivatekey,CreateSSHClient,OpenNewWindow,Install,Uninstall,RunServer,CloseServer,CheckPort,AddServerIP,Setprivatekey,Fetchost,UploadFolderToRemoteHost } from '../wailsjs/go/main/App'
+import LoginPage from './components/LoginPage.vue'
 
 interface ipface {
   ip: string
@@ -297,9 +353,11 @@ interface Host {
   token: string
   sshtype:boolean
   private_key:string
+  masterIP: string
   status: 'online' | 'offline' | 'offing' | 'oning'
   install: 'doing' | 'finish' | 'wait' | 'uninstall'
   log:string
+  category: string
 }
 
 const formRef = ref<FormInstance>()
@@ -309,6 +367,11 @@ const dialogVisible = ref(false)
 const uploadDialogVisible = ref(false)
 const isEdit = ref(false)
 const siyao = ref("")
+const isLogin = ref(false)
+
+const handleLoginSuccess = () => {
+  isLogin.value = true
+}
 const dosiyao = ref(false)
 const currentEditId = ref<number>(0)
 const isShow = ref(false);
@@ -338,6 +401,16 @@ const handleCloseConnection = () => {
 
 const newip = ref<ipface>({iface:'',ip:'',status:'await'})
 
+// 分类相关数据
+const categoryDialogVisible = ref(false)
+const newCategory = ref('')
+const categories = ref<string[]>([])
+
+// 主节点IP相关数据
+const masterIPDialogVisible = ref(false)
+const newMasterIP = ref('')
+const masterIPs = ref<string[]>([])
+
 const formData = reactive<Omit<Host, 'id' | 'status'>>({
   name: '',
   ip: '',
@@ -355,7 +428,9 @@ const formData = reactive<Omit<Host, 'id' | 'status'>>({
   private_key:"",
   sshtype:false,
   install: "wait",
-  log:''
+  log:'',
+  category: '',
+  masterIP: ''
 })
 
 const formRules = reactive<FormRules>({
@@ -376,7 +451,9 @@ const formRules = reactive<FormRules>({
         }
       }, trigger: 'blur' }
   ],
-  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }]
+  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
+  category: [{ required: true, message: '请选择分类', trigger: 'change' }],
+  masterIP: [{ required: true, message: '请选择主节点IP', trigger: 'change' }]
 })
 
 const initDB = (): Promise<IDBDatabase> => {
@@ -457,7 +534,10 @@ const loadHostList = async () => {
     }));
     hostList.value = updatedHosts;
     originalHostList.value = updatedHosts;
-    hostName.value = [...new Set(hostList.value.map((host: Host) => host.name))]
+    // 更新分类列表
+    categories.value = [...new Set(hostList.value.map((host: Host) => host.category))];
+    // 更新主节点IP列表
+    masterIPs.value = [...new Set(hostList.value.map((host: Host) => host.masterIP))];
   } catch (error) {
     console.error('加载数据失败:', error);
     ElMessage.error('数据加载失败');
@@ -470,6 +550,40 @@ const newWindows = () =>{
     console.log(res);
   })
 }
+const handleAddCategory = () => {
+  if (!newCategory.value) {
+    ElMessage.warning('请输入分类名称')
+    return
+  }
+  if (categories.value.includes(newCategory.value)) {
+    ElMessage.warning('该分类已存在')
+    return
+  }
+  categories.value.push(newCategory.value)
+  newCategory.value = ''
+  categoryDialogVisible.value = false
+  ElMessage.success('添加成功')
+}
+
+const handleAddMasterIP = () => {
+  if (!newMasterIP.value) {
+    ElMessage.warning('请输入主节点IP')
+    return
+  }
+  if (masterIPs.value.includes(newMasterIP.value)) {
+    ElMessage.warning('该主节点IP已存在')
+    return
+  }
+  if (!/^(\d{1,3}\.){3}\d{1,3}$/.test(newMasterIP.value)) {
+    ElMessage.warning('请输入正确的IP地址格式')
+    return
+  }
+  masterIPs.value.push(newMasterIP.value)
+  newMasterIP.value = ''
+  masterIPDialogVisible.value = false
+  ElMessage.success('添加成功')
+}
+
 const handleAdd = () => {
   isEdit.value = false
   dialogVisible.value = true
@@ -528,6 +642,7 @@ const handleDelete = async (id: number) => {
       const index = hostList.value.findIndex(host => host.id === id);
       hostList.value.splice(index, 1);
       await loadHostList()
+      dialogVisible.value = false
       ElMessage.success('删除成功')
     } catch (error) {
       ElMessage.error('删除失败')
@@ -662,7 +777,8 @@ const handleStart = async (host: Host) => {
   }
 };
 
-const handleFetch = async (host: Host) => {
+const handleFetch = async () => {
+  const host = formData as Host;
   const index = hostList.value.findIndex(h => h.id === host.id);
   try {
     Fetchost(host.ip+":5189").then((res: any) => {
@@ -870,11 +986,19 @@ const generateRandomString = (length: number) => {
 
 
 const inputValue = ref('')
-const hostName = ref([''])
+const selectedCategory = ref('')
+
+const filterByCategory = () => {
+  if (!selectedCategory.value) {
+    hostList.value = originalHostList.value
+    return
+  }
+  hostList.value = originalHostList.value.filter(host => host.category === selectedCategory.value)
+}
 // 分类功能
 const handleSortClick = (value: string) => {
   hostList.value = originalHostList.value;
-  hostList.value = hostList.value.filter((host) => host.name.includes(value))
+  hostList.value = hostList.value.filter((host) => host.category === value)
 }
 
 //搜索功能
