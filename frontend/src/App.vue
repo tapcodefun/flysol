@@ -55,7 +55,7 @@
           <el-button size="small" type="danger" v-if="row.status==='offline' && row.pid>0" @click="handleClose(row)">关闭</el-button>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="355">
+      <el-table-column label="操作" width="260" fixed="right">
         <template #default="{ row }">
             <el-button size="small" @click="handleEdit(row)">编辑</el-button>
             <el-button size="small" type="success" @click="handleConnect(row)">连接</el-button>
@@ -1116,7 +1116,11 @@ const handleUpload = async () => {
     return;
   }
   
-  ElMessage.info('正在上传文件，请稍候...');
+  const loading = ElLoading.service({
+    lock: true,
+    text: '正在上传文件，请稍候...',
+    background: 'rgba(0, 0, 0, 0.7)'
+  });
   
   try {
     let successCount = 0;
@@ -1160,6 +1164,7 @@ const handleUpload = async () => {
     }
     
     // 显示总体上传结果
+    loading.close();
     if (successCount > 0) {
       ElMessage.success(`成功上传 ${successCount} 个文件`);
     }
@@ -1175,6 +1180,7 @@ const handleUpload = async () => {
       uploadRef.value.clearFiles();
     }
   } catch (error) {
+    loading.close();
     console.error('文件上传失败:', error);
     ElMessage.error('文件上传失败: ' + error);
   }
