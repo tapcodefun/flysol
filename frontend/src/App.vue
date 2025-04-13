@@ -1,19 +1,33 @@
 <template>
   <LoginPage v-if="!isLogin" @login-success="handleLoginSuccess" />
   <div v-else class="host-management">
-    <div class="operation-bar">
-      <el-button type="primary" @click="handleAdd">添加主机</el-button>
-      <el-button type="success" @click="loadHostList">刷新主机</el-button>
-      <el-input v-model="inputValue" style="width: 200px; margin: 0 10px;" placeholder="请输入内容" />
-      <el-button type="info" @click="handleButtonClick(inputValue)">搜索</el-button>
-      <el-select v-model="selectedCategory" placeholder="分类" style="width: 120px; margin: 0 10px" clearable @change="filterByCategory">
-      <el-option
-        v-for="item in categories"
-        :key="item"
-        :label="item"
-        @click="handleSortClick(item)"
-      />
-    </el-select>
+    <div class="operation-bar" style="position: relative;">
+      <el-button type="primary" @click="handleAdd">
+        <el-icon><Plus /></el-icon>
+      </el-button>
+      <el-button type="success" @click="loadHostList">
+        <el-icon><RefreshRight /></el-icon>
+      </el-button>
+      <el-input v-model="inputValue" style="width: 200px; margin: 0 10px;" placeholder="请输入主机名称或IP地址" />
+      <el-button type="info" @click="handleButtonClick(inputValue)">
+        <el-icon><Search /></el-icon>
+      </el-button>
+      <el-select v-model="selectedCategory" placeholder="分类" style="width: 120px; margin-right: 10px" clearable @change="filterByCategory">
+        <el-option
+          v-for="item in categories"
+          :key="item"
+          :label="item"
+          @click="handleSortClick(item)"
+        />
+      </el-select>
+      <div style="position:absolute; left: 500px; top:3px; display: flex; align-items: center; gap: 8px;">
+        <ul style="list-style: none; margin: 0; padding: 0; display: flex; gap: 8px; overflow-x: auto; white-space: nowrap;">
+          <li v-for="ip in [...new Set(hostList.map(host => host.masterIP).filter(Boolean))]" :key="ip" 
+              style="padding: 4px 12px; background: #ecf5ff; border: 1px solid #d9ecff; border-radius: 4px; font-size: 13px; color: #409eff; white-space: nowrap;">
+            {{ ip }}
+          </li>
+        </ul>
+      </div>
     </div>
     <div v-if="isShow" style="display: flex; justify-content: flex-start;">
       <el-button type="primary" @click="handleCloseConnection">关闭</el-button>
@@ -22,12 +36,11 @@
       <el-table-column prop="name" label="主机名称" width="180" />
       <el-table-column prop="category" label="分类" width="120" />
       <el-table-column prop="ip" label="IP地址" width="150" />
-      <el-table-column prop="masterIP" label="主节点IP" width="150" />
       <el-table-column prop="blockId" label="区块ID" width="120"/>
       <el-table-column prop="cpu" label="CPU" width="100" />
       <el-table-column prop="pid" label="进程" width="100">
         <template #default="{ row }">
-          <el-tag v-if="row.pid==-2">无</el-tag>
+          <el-tag v-if="row.pid==-2" @click="handleFetch(row)" style="cursor: pointer;">拉取</el-tag>
           <el-tag v-else-if="row.pid==0">未启动</el-tag>
           <el-tag v-else-if="row.pid==-1">未安装</el-tag>
           <el-tag v-else>{{row.pid}}</el-tag>
@@ -94,9 +107,12 @@
                             <el-input v-model="sshForm.sshPort" placeholder="默认22" />
                           </el-form-item>
                         </el-col>
-                        <el-col :span="24">
+                        <el-col :span="12">
                           <el-form-item label="远程目录" prop="remoteDir">
-                            <el-input v-model="sshForm.remoteDir" placeholder="默认/home/bot" />
+                            <div style="display: flex; align-items: center;">
+                              <el-input v-model="sshForm.remoteDir" placeholder="默认/home/bot" style="margin-right: 10px" />
+                              <el-button type="primary" size="default" v-if="hasCompressedFile" @click="UPzip">解压</el-button>
+                            </div>
                           </el-form-item>
                         </el-col>
                       </el-row>
@@ -150,7 +166,7 @@
                             <el-input v-model="sshForm.sshPort" placeholder="默认22" />
                           </el-form-item>
                         </el-col>
-                        <el-col :span="24">
+                        <el-col :span="12">
                           <el-form-item label="远程目录" prop="remoteDir">
                             <el-input v-model="sshForm.remoteDir" placeholder="默认/home/bot" />
                           </el-form-item>
@@ -249,7 +265,8 @@
                 <el-select v-model="formData.category" style="width: 200px; margin-right: 10px;">
                   <el-option v-for="cat in categories" :key="cat" :label="cat" :value="cat" />
                 </el-select>
-                <el-button type="primary" @click="categoryDialogVisible = true">自定义分类</el-button>
+                <el-button type="primary" @click="categoryDialogVisible = true">添加分类</el-button>
+                <el-button type="danger" @click="handleDeleteCategory(formData.category)">删除分类</el-button>
               </div>
             </el-form-item>
           </el-col>
@@ -259,7 +276,7 @@
                 <el-select v-model="formData.masterIP" style="width: 200px; margin-right: 10px;">
                   <el-option v-for="ip in masterIPs" :key="ip" :label="ip" :value="ip" />
                 </el-select>
-                <el-button type="primary" @click="masterIPDialogVisible = true">自定义主节点IP</el-button>
+                <el-button type="primary" @click="masterIPDialogVisible = true">添加主节点IP</el-button>
               </div>
             </el-form-item>
           </el-col>
@@ -304,7 +321,6 @@
             <el-button type="info" @click="handleUninstall"  v-if="formData.install == 'finish'" >卸载</el-button>
             <el-button type="info" @click="setdefault"  v-if="formData.install == 'finish'" >重置</el-button>
             <el-button type="danger" @click="handleDelete(currentEditId)" v-if="isEdit">删除</el-button>
-            <el-button type="danger" @click="handleFetch()" v-if="isEdit">拉取</el-button>
           </div>
           <div>
             <el-button @click="dialogVisible = false">取消</el-button>
@@ -327,9 +343,10 @@ import { isMacOS,isWindows,OpenURL,loadEnvironment } from './utils/platform';
 import { ref, reactive, onMounted } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElMessageBox, install } from 'element-plus'
-import { UploadFilled, FolderAdd, Document, Folder, Close } from '@element-plus/icons-vue'
+import { Plus, RefreshRight, Search } from '@element-plus/icons-vue'
 import { UploadFileToRemoteHost,UploadPrivatekey,CreateSSHClient,OpenNewWindow,Install,Uninstall,RunServer,CloseServer,CheckPort,AddServerIP,Setprivatekey,Fetchost,UploadFolderToRemoteHost } from '../wailsjs/go/main/App'
 import LoginPage from './components/LoginPage.vue'
+import { is } from '@babel/types';
 
 interface ipface {
   ip: string
@@ -786,11 +803,10 @@ const handleStart = async (host: Host) => {
   }
 };
 
-const handleFetch = async () => {
-  const host = formData as Host;
-  const index = hostList.value.findIndex(h => h.id === host.id);
+const handleFetch = async (row: Host) => {
+  const index = hostList.value.findIndex(h => h.id === row.id);
   try {
-    Fetchost(host.ip+":5189").then(async (res: any) => {
+    Fetchost(row.ip+":5189").then(async (res: any) => {
       var content = JSON.parse(res)
       console.log(content)
       hostList.value[index].token = content.token;
@@ -1037,6 +1053,19 @@ const showUploadDialog = (row: Host) => {
 
 const fileList = ref<File[]>([]);
 const uploadRef = ref();
+const hasCompressedFile = ref(false);
+const isUpzip = ref(false);
+
+// 检查是否为压缩文件
+const isCompressedFile = (fileName: string): boolean => {
+  const compressedExtensions = [".zip", ".tar", ".gz", ".rar", ".7z"];
+  return compressedExtensions.some(ext => fileName.toLowerCase().endsWith(ext));
+};
+
+const UPzip = () => {
+ isUpzip.value = true 
+ ElMessage.info('文件在上传后将被解压')
+}
 
 // SSH连接参数表单数据
 const sshForm = ref({
@@ -1049,11 +1078,14 @@ const sshForm = ref({
 
 const handleFileChange = (file: File, files: FileList) => {
   fileList.value = Array.from(files);
+  // 检查是否包含压缩文件
+  hasCompressedFile.value = fileList.value.some(file => isCompressedFile(file.name));
 };
 
 const emptyFileList = () => {
   uploadDialogVisible.value = false;
   fileList.value = [];
+  hasCompressedFile.value = false;
   selectedFolderName.value = ''
   selectedFolderFiles.value = []
   if (uploadRef.value) {
@@ -1107,9 +1139,12 @@ const handleUpload = async () => {
           sshForm.value.sshPort,
           sshForm.value.remoteDir,
           file.name,
-          fileContent
+          fileContent,
+          String(isUpzip.value)
         );
-        
+
+        isUpzip.value = false
+
         if (result === 'success') {
           successCount++;
           ElMessage.success(`文件 ${file.name} 上传成功`);
@@ -1321,6 +1356,27 @@ const handleUploadFileList = async () => {
   } catch (error) {
     console.error('文件夹上传失败:', error);
     ElMessage.error('文件夹上传失败: ' + error);
+  }
+}
+
+const handleDeleteCategory = (category: string) => {
+  if (!category) {
+    ElMessage.warning('请先选择要删除的分类')
+    return
+  }
+  
+  const hasHostsInCategory = hostList.value.some(host => host.category === category)
+  
+  if (hasHostsInCategory) {
+    ElMessage.warning('该分类下存在主机，无法删除')
+    return
+  }
+  
+  const index = categories.value.indexOf(category)
+  if (index > -1) {
+    categories.value.splice(index, 1)
+    ElMessage.success('分类删除成功')
+    formData.category = ''
   }
 }
 

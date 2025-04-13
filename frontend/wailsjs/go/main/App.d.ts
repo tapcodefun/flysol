@@ -24,7 +24,7 @@ export function Setprivatekey(arg1:string,arg2:string,arg3:string,arg4:string,ar
 
 export function Uninstall(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<string>;
 
-export function UploadFileToRemoteHost(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string,arg7:string):Promise<string>;
+export function UploadFileToRemoteHost(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string,arg7:string,arg8:string):Promise<string>;
 
 export function UploadFolderToRemoteHost(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string,arg7:Record<string, string>):Promise<string>;
 

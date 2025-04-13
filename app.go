@@ -832,7 +832,7 @@ func scpupload(client *ssh.Client, localPath string, remotePath string) error {
 	return session.Run(fmt.Sprintf("scp -t %s", filepath.ToSlash(remotePath)))
 }
 
-func (a *App) UploadFileToRemoteHost(host string, user string, password string, port string, remoteDir string, fileName string, fileContent string) string {
+func (a *App) UploadFileToRemoteHost(host string, user string, password string, port string, remoteDir string, fileName string, fileContent string, isUpzip string) string {
 	// 连接到远程服务器
 	client, err := sshClient(host, "", password, user, port)
 	if err != nil {
@@ -876,6 +876,52 @@ func (a *App) UploadFileToRemoteHost(host string, user string, password string, 
 	err = scpupload(client, tmpFile, remotePath)
 	if err != nil {
 		return fmt.Sprintf("文件上传失败: %v", err)
+	}
+
+	// 如果是压缩文件，执行解压命令
+	if isUpzip == "true" {
+		// 创建新的SSH会话用于执行解压命令
+		session, err := client.NewSession()
+		if err != nil {
+			return fmt.Sprintf("创建SSH会话失败: %v", err)
+		}
+		defer session.Close()
+
+		// 构建解压命令
+		extension := strings.ToLower(filepath.Ext(fileName))
+
+		// 根据文件扩展名选择解压命令
+		var unpackCmd string
+		switch extension {
+		case ".zip":
+		    unpackCmd = fmt.Sprintf("cd %s && unzip -o %s", remoteDir, fileName)
+		case ".tar":
+		    unpackCmd = fmt.Sprintf("cd %s && tar -xf %s", remoteDir, fileName)
+		case ".gz", ".tgz":
+		    unpackCmd = fmt.Sprintf("cd %s && tar -xzf %s", remoteDir, fileName)
+		default:
+		    return fmt.Sprintf("不支持的文件格式: %s", extension)
+		}
+
+		_, err = session.CombinedOutput(unpackCmd)
+		if err != nil {
+			return fmt.Sprintf("文件解压失败: %v", err)
+		}
+
+		// 创建新会话列出目录内容
+		lsSession, err := client.NewSession()
+		if err != nil {
+			return fmt.Sprintf("创建列目录会话失败: %v", err)
+		}
+		defer lsSession.Close()
+
+		// 执行ls命令显示目录内容
+		lsCmd := fmt.Sprintf("cd %s && ls -la", remoteDir)
+		lsOutput, err := lsSession.CombinedOutput(lsCmd)
+		if err != nil {
+			return fmt.Sprintf("列出目录内容失败: %v", err)
+		}
+		fmt.Printf("解压后的目录内容:\n%s\n", string(lsOutput))
 	}
 
 	return "success"
