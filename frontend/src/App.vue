@@ -23,8 +23,16 @@
       <div style="position:absolute; right: -640px; top: 0px; display: flex; align-items: center; gap: 8px;">
         <ul style="list-style: none; margin: 0; padding: 0; display: flex; gap: 8px; overflow-x: auto; white-space: nowrap;">
           <li v-for="ip in [...new Set(hostList.map(host => host.masterIP).filter(Boolean))]" :key="ip" 
-              style="padding: 4px 12px; background: #ecf5ff; border: 1px solid #d9ecff; border-radius: 4px; font-size: 13px; color: #409eff; white-space: nowrap;">
-            {{ ip }}
+              :style="{
+                padding: '4px 12px', 
+                background: getHostByMasterIP(ip)?.masterIPStatus === 'error' ? '#ffecec' : '#ecf5ff', 
+                border: getHostByMasterIP(ip)?.masterIPStatus === 'error' ? '1px solid #ffdbdb' : '1px solid #d9ecff', 
+                borderRadius: '4px', 
+                fontSize: '13px', 
+                color: getHostByMasterIP(ip)?.masterIPStatus === 'error' ? '#f56c6c' : '#409eff', 
+                whiteSpace: 'nowrap'
+              }">
+            {{ getHostByMasterIP(ip)?.masterIPStatus === 'error' ? ip + ' （漫区块 ' + String(getHostByMasterIP(ip)?.blockId).replace('-', '') + '）' : ip }}
           </li>
         </ul>
       </div>
@@ -43,7 +51,7 @@
           <el-tag v-if="row.pid==-2" @click="handleFetch(row)" style="cursor: pointer;">拉取</el-tag>
           <el-tag v-else-if="row.pid==0">未启动</el-tag>
           <el-tag v-else-if="row.pid==-1">未安装</el-tag>
-          <el-tag v-else>{{row.pid}}</el-tag>
+          <el-tag v-else @click="handleFetch(row)" style="cursor: pointer;">{{row.pid}}</el-tag>
         </template>
       </el-table-column>
       <el-table-column prop="status" label="状态" width="120">
@@ -348,6 +356,7 @@ import { Plus, RefreshRight, Search } from '@element-plus/icons-vue'
 import { UploadFileToRemoteHost,UploadPrivatekey,CreateSSHClient,OpenNewWindow,Install,Uninstall,RunServer,CloseServer,CheckPort,AddServerIP,Setprivatekey,Fetchost,UploadFolderToRemoteHost } from '../wailsjs/go/main/App'
 import LoginPage from './components/LoginPage.vue'
 import { is } from '@babel/types';
+import { get } from 'http';
 
 interface ipface {
   ip: string
@@ -376,6 +385,7 @@ interface Host {
   log:string
   category: string
   blockId: string
+  masterIPStatus?: 'normal' | 'error'
 }
 
 const formRef = ref<FormInstance>()
@@ -819,7 +829,14 @@ const handleFetch = async (row: Host) => {
         if (hostList.value[index].masterIP) {
           try {
             const blockResponse = await axios.get(`https://sol.tapcode.fun/api/solana/slot?ip=${hostList.value[index].masterIP}`);
+            console.log(blockResponse.data)
             hostList.value[index].blockId = blockResponse.data.data.slot;
+            // 检查响应码，如果是-1，标记该主节点
+            if (blockResponse.data.code === -1) {
+              hostList.value[index].masterIPStatus = 'error';
+            } else {
+              hostList.value[index].masterIPStatus = 'normal';
+            }
           } catch (err) {
             hostList.value[index].blockId = '-';
           }
@@ -1408,6 +1425,11 @@ const handleDeleteMasterIP = (ip: string) => {
   }
 }
 
+// 根据主节点IP获取对应的主机信息
+const getHostByMasterIP = (ip: string) => {
+  return hostList.value.find(host => host.masterIP === ip);
+}
+
 onMounted(async() => {
   await loadEnvironment()
   await loadHostList()
@@ -1419,6 +1441,12 @@ onMounted(async() => {
         try {
           const blockResponse = await axios.get(`https://sol.tapcode.fun/api/solana/slot?ip=${host.masterIP}`);
           hostList.value[index].blockId = blockResponse.data.data.slot;
+          // 检查响应码，如果是-1，标记该主节点
+          if (blockResponse.data.code === -1) {
+            hostList.value[index].masterIPStatus = 'error';
+          } else {
+            hostList.value[index].masterIPStatus = 'normal';
+          }
         } catch (err) {
           hostList.value[index].blockId = '-';
         }
