@@ -12,7 +12,7 @@
       <el-button type="info" @click="handleButtonClick(inputValue)">
         <el-icon><Search /></el-icon>
       </el-button>
-      <el-select v-model="selectedCategory" placeholder="分类" style="width: 120px; margin-right: 10px" clearable @change="filterByCategory">
+      <el-select v-model="selectedCategory" placeholder="分类" style="width: 120px; margin:0 10px" clearable @change="filterByCategory">
         <el-option
           v-for="item in categories"
           :key="item"
@@ -20,7 +20,7 @@
           @click="handleSortClick(item)"
         />
       </el-select>
-      <div style="position:absolute; left: 500px; top:3px; display: flex; align-items: center; gap: 8px;">
+      <div style="position:absolute; right: -640px; top: 0px; display: flex; align-items: center; gap: 8px;">
         <ul style="list-style: none; margin: 0; padding: 0; display: flex; gap: 8px; overflow-x: auto; white-space: nowrap;">
           <li v-for="ip in [...new Set(hostList.map(host => host.masterIP).filter(Boolean))]" :key="ip" 
               style="padding: 4px 12px; background: #ecf5ff; border: 1px solid #d9ecff; border-radius: 4px; font-size: 13px; color: #409eff; white-space: nowrap;">
@@ -277,6 +277,7 @@
                   <el-option v-for="ip in masterIPs" :key="ip" :label="ip" :value="ip" />
                 </el-select>
                 <el-button type="primary" @click="masterIPDialogVisible = true">添加主节点IP</el-button>
+                <el-button type="danger" @click="handleDeleteMasterIP(formData.masterIP)">删除主节点IP</el-button>
               </div>
             </el-form-item>
           </el-col>
@@ -340,7 +341,7 @@
 import axios from 'axios';
 import { ElLoading } from 'element-plus';
 import { isMacOS,isWindows,OpenURL,loadEnvironment } from './utils/platform';
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElMessageBox, install } from 'element-plus'
 import { Plus, RefreshRight, Search } from '@element-plus/icons-vue'
@@ -1154,7 +1155,7 @@ const handleUpload = async () => {
           ElMessage.success(`文件 ${file.name} 上传成功`);
         } else {
           failCount++;
-          ElMessage.error(`文件 ${file.name} 上传失败: ${result}`);
+          ElMessage.error(`文件 ${file.name} 上传失败`);
         }
       } catch (error) {
         failCount++;
@@ -1386,10 +1387,50 @@ const handleDeleteCategory = (category: string) => {
   }
 }
 
+const handleDeleteMasterIP = (ip: string) => {
+  if (!ip) {
+    ElMessage.warning('请先选择要删除的主节点IP')
+    return
+  }
+  
+  const hasHostsUsingIP = hostList.value.some(host => host.masterIP === ip)
+  
+  if (hasHostsUsingIP) {
+    ElMessage.warning('该主节点IP正在被使用，无法删除')
+    return
+  }
+  
+  const index = masterIPs.value.indexOf(ip)
+  if (index > -1) {
+    masterIPs.value.splice(index, 1)
+    ElMessage.success('主节点IP删除成功')
+    formData.masterIP = ''
+  }
+}
+
 onMounted(async() => {
   await loadEnvironment()
-  loadHostList()
-})
+  await loadHostList()
+  // 添加定时器，每分钟更新一次区块ID
+  const timer = setInterval(async () => {
+    for (let index = 0; index < hostList.value.length; index++) {
+      const host = hostList.value[index];
+      if (host.status === 'online' && host.masterIP) {
+        try {
+          const blockResponse = await axios.get(`https://sol.tapcode.fun/api/solana/slot?ip=${host.masterIP}`);
+          hostList.value[index].blockId = blockResponse.data.data.slot;
+        } catch (err) {
+          hostList.value[index].blockId = '-';
+        }
+      }
+    }
+  }, 60000);
+
+  // 组件卸载时清除定时器
+  onUnmounted(() => {
+    clearInterval(timer);
+  });
+});
 </script>
 
 <style scoped>
