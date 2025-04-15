@@ -1,28 +1,32 @@
 <template>
   <LoginPage v-if="!isLogin" @login-success="handleLoginSuccess" />
   <div v-else class="host-management">
-    <div class="operation-bar" style="position: relative;">
-      <el-button type="primary" @click="handleAdd">
-        <el-icon><Plus /></el-icon>
-      </el-button>
-      <el-button type="success" @click="loadHostList">
-        <el-icon><RefreshRight /></el-icon>
-      </el-button>
-      <el-input v-model="inputValue" style="width: 200px; margin: 0 10px;" placeholder="请输入主机名称或IP地址" />
-      <el-button type="info" @click="handleButtonClick(inputValue)">
-        <el-icon><Search /></el-icon>
-      </el-button>
-      <el-select v-model="selectedCategory" placeholder="分类" style="width: 120px; margin:0 10px" clearable @change="filterByCategory">
-        <el-option
-          v-for="item in categories"
-          :key="item"
-          :label="item"
-          @click="handleSortClick(item)"
-        />
-      </el-select>
-      <div style="position:absolute; right: -640px; top: 0px; display: flex; align-items: center; gap: 8px;">
+    <div class="operation-bar">
+      <div style="float: left;">
+        <el-button type="primary" @click="handleAdd">
+          <el-icon><Plus /></el-icon>
+        </el-button>
+        <el-button type="success" @click="loadHostList">
+          <el-icon><RefreshRight /></el-icon>
+        </el-button>
+        <el-input v-model="inputValue" style="width: 200px; margin: 0 10px;" placeholder="请输入主机名称或IP地址" />
+        <el-button type="info" @click="handleButtonClick(inputValue)">
+          <el-icon><Search /></el-icon>
+        </el-button>
+        <el-select placeholder="分类" style="width: 120px; margin:0 10px">
+          <el-option
+            v-for="item in categories"
+            :key="item"
+            :label="item"
+            @click="handleSortClick(item)"
+          />
+        </el-select>
+      </div>
+      
+      <!-- <div style="position:absolute; right: -640px; top: 0px; display: flex; align-items: center; gap: 8px;"> -->
+      <div style="float: right; align-items: center; gap: 8px;">
         <ul style="list-style: none; margin: 0; padding: 0; display: flex; gap: 8px; overflow-x: auto; white-space: nowrap;">
-          <li v-for="ip in [...new Set(hostList.map(host => host.masterIP).filter(Boolean))]" :key="ip" 
+          <li v-for="ip in masterIPs" :key="ip" 
               :style="{
                 padding: '4px 12px', 
                 background: getHostByMasterIP(ip)?.masterIPStatus === 'error' ? '#ffecec' : '#ecf5ff', 
@@ -32,7 +36,7 @@
                 color: getHostByMasterIP(ip)?.masterIPStatus === 'error' ? '#f56c6c' : '#409eff', 
                 whiteSpace: 'nowrap'
               }">
-            {{ getHostByMasterIP(ip)?.masterIPStatus === 'error' ? ip + ' （漫区块 ' + String(getHostByMasterIP(ip)?.blockId).replace('-', '') + '）' : ip }}
+            {{ getHostByMasterIP(ip)?.masterIPStatus === 'error' ? ip + ' （漫区块 ' + String(getHostByMasterIP(ip)?.blockId).replace('-', '') + '）' : ip +'（' + getHostByMasterIP(ip)?.blockId + '）'  }}
           </li>
         </ul>
       </div>
@@ -45,13 +49,12 @@
         <component :is="Agent" v-if="isShow" :host="currentHost.ip" :token="currentHost.token" :hostname="currentHost.name"></component>
       </div>
     </div>
-    <el-table :data="hostList" border style="width: 100%">
-      <el-table-column prop="name" label="主机名称" width="180" />
-      <el-table-column prop="category" label="分类" width="120" />
-      <el-table-column prop="ip" label="IP地址" width="150" />
-      <el-table-column prop="blockId" label="区块ID" width="120"/>
-      <el-table-column prop="cpu" label="CPU" width="100" />
-      <el-table-column prop="pid" label="进程" width="100">
+    <el-table :data="hostList" border style="width: 100%; height: 100%">
+      <el-table-column prop="name" label="主机名称" min-width="180" />
+      <el-table-column prop="category" label="分类" min-width="120" />
+      <el-table-column prop="ip" label="IP地址" min-width="150" />
+      <el-table-column prop="cpu" label="CPU" min-width="100" />
+      <el-table-column prop="pid" label="进程" min-width="100">
         <template #default="{ row }">
           <el-tag v-if="row.pid==-2" @click="handleFetch(row)" style="cursor: pointer;">拉取</el-tag>
           <el-tag v-else-if="row.pid==0">未启动</el-tag>
@@ -363,6 +366,7 @@ import { UploadFileToRemoteHost,UploadPrivatekey,CreateSSHClient,OpenNewWindow,I
 import LoginPage from './components/LoginPage.vue'
 import { is } from '@babel/types';
 import { get } from 'http';
+import { ca } from 'element-plus/es/locale';
 
 interface ipface {
   ip: string
@@ -540,7 +544,6 @@ const deleteHost = async (id: number): Promise<void> => {
   })
 }
 
-
 const loadHostList = async () => {
   try {
     const hosts = await getAllHosts();
@@ -565,10 +568,6 @@ const loadHostList = async () => {
     }));
     hostList.value = updatedHosts;
     originalHostList.value = updatedHosts;
-    // 更新分类列表
-    categories.value = [...new Set(hostList.value.map((host: Host) => host.category))];
-    // 更新主节点IP列表
-    masterIPs.value = [...new Set(hostList.value.map((host: Host) => host.masterIP))];
   } catch (error) {
     console.error('加载数据失败:', error);
     ElMessage.error('数据加载失败');
@@ -591,6 +590,8 @@ const handleAddCategory = () => {
     return
   }
   categories.value.push(newCategory.value)
+  localStorage.setItem('categories', JSON.stringify(categories.value))
+  formData.category = newCategory.value
   newCategory.value = ''
   categoryDialogVisible.value = false
   ElMessage.success('添加成功')
@@ -610,6 +611,8 @@ const handleAddMasterIP = () => {
     return
   }
   masterIPs.value.push(newMasterIP.value)
+  localStorage.setItem('masterIPs', JSON.stringify(masterIPs.value))
+  formData.masterIP = newMasterIP.value
   newMasterIP.value = ''
   masterIPDialogVisible.value = false
   ElMessage.success('添加成功')
@@ -1034,15 +1037,7 @@ const generateRandomString = (length: number) => {
 
 
 const inputValue = ref('')
-const selectedCategory = ref('')
 
-const filterByCategory = () => {
-  if (!selectedCategory.value) {
-    hostList.value = originalHostList.value
-    return
-  }
-  hostList.value = originalHostList.value.filter(host => host.category === selectedCategory.value)
-}
 // 分类功能
 const handleSortClick = (value: string) => {
   hostList.value = originalHostList.value;
@@ -1394,6 +1389,11 @@ const handleDeleteCategory = (category: string) => {
   const index = categories.value.indexOf(category)
   if (index > -1) {
     categories.value.splice(index, 1)
+    localStorage.setItem('categories', JSON.stringify(categories.value))
+    // const savedCategories = localStorage.getItem('categories')
+    // if (savedCategories) {
+    //   categories.value = JSON.parse(savedCategories)
+    // }
     ElMessage.success('分类删除成功')
     formData.category = ''
   }
@@ -1415,6 +1415,7 @@ const handleDeleteMasterIP = (ip: string) => {
   const index = masterIPs.value.indexOf(ip)
   if (index > -1) {
     masterIPs.value.splice(index, 1)
+    localStorage.setItem('masterIPs', JSON.stringify(masterIPs.value))
     ElMessage.success('主节点IP删除成功')
     formData.masterIP = ''
   }
@@ -1453,15 +1454,25 @@ onMounted(async() => {
   onUnmounted(() => {
     clearInterval(timer);
   });
+  const savedCategories = localStorage.getItem('categories')
+  const savedMasterIPs = localStorage.getItem('masterIPs')
+  if (savedCategories) {
+    categories.value = JSON.parse(savedCategories)
+  }
+  if (savedMasterIPs) {
+    masterIPs.value = JSON.parse(savedMasterIPs)
+  }
 });
 </script>
 
 <style scoped>
 .host-management {
+  width: 100%;
   padding: 20px;
 }
 
 .operation-bar {
+  width: 100%;
   margin-bottom: 20px;
   float: left;
 }
