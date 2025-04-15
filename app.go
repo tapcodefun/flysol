@@ -878,51 +878,60 @@ func (a *App) UploadFileToRemoteHost(host string, user string, password string, 
 		return fmt.Sprintf("文件上传失败: %v", err)
 	}
 
-	// 如果是压缩文件，执行解压命令
-	if isUpzip == "true" {
-		// 创建新的SSH会话用于执行解压命令
-		session, err := client.NewSession()
-		if err != nil {
-			return fmt.Sprintf("创建SSH会话失败: %v", err)
-		}
-		defer session.Close()
+	// // 如果是压缩文件，执行解压命令
+	// fileExt := strings.ToLower(filepath.Ext(fileName))
+	// validCompressExts := []string{".tar.gz", ".tgz", ".gz", ".zip", ".tar"}
+	// isValidCompress := false
+	// for _, ext := range validCompressExts {
+	//     if fileExt == ext || (ext == ".tar.gz" && strings.HasSuffix(strings.ToLower(fileName), ext)) {
+	//         isValidCompress = true
+	//         break
+	//     }
+	// }
+	// if isUpzip == "true" && isValidCompress {
+	//     // 创建新的SSH会话用于执行解压命令
+	//     session, err := client.NewSession()
+	//     if err != nil {
+	//         return fmt.Sprintf("创建SSH会话失败: %v", err)
+	//     }
+	//     defer session.Close()
+	
+	//     // 构建解压命令
+	//     extension := strings.ToLower(filepath.Ext(fileName))
+	
+	//     // 根据文件扩展名选择解压命令
+	//     var unpackCmd string
+	//     switch extension {
+	//     case ".zip":
+	//         unpackCmd = fmt.Sprintf("cd %s && unzip -o %s", remoteDir, fileName)
+	//     case ".tar":
+	//         unpackCmd = fmt.Sprintf("cd %s && tar -xf %s", remoteDir, fileName)
+	//     case ".gz", ".tgz":
+	//         unpackCmd = fmt.Sprintf("cd %s && tar -xzf %s", remoteDir, fileName)
+	//     default:
+	//         return fmt.Sprintf("不支持的文件格式: %s", extension)
+	//     }
 
-		// 构建解压命令
-		extension := strings.ToLower(filepath.Ext(fileName))
+	//     _, err = session.CombinedOutput(unpackCmd)
+	//     if err != nil {
+	//         return fmt.Sprintf("文件解压失败: %v", err)
+	//     }
 
-		// 根据文件扩展名选择解压命令
-		var unpackCmd string
-		switch extension {
-		case ".zip":
-		    unpackCmd = fmt.Sprintf("cd %s && unzip -o %s", remoteDir, fileName)
-		case ".tar":
-		    unpackCmd = fmt.Sprintf("cd %s && tar -xf %s", remoteDir, fileName)
-		case ".gz", ".tgz":
-		    unpackCmd = fmt.Sprintf("cd %s && tar -xzf %s", remoteDir, fileName)
-		default:
-		    return fmt.Sprintf("不支持的文件格式: %s", extension)
-		}
+	//     // 创建新会话列出目录内容
+	//     lsSession, err := client.NewSession()
+	//     if err != nil {
+	//         return fmt.Sprintf("创建列目录会话失败: %v", err)
+	//     }
+	//     defer lsSession.Close()
 
-		_, err = session.CombinedOutput(unpackCmd)
-		if err != nil {
-			return fmt.Sprintf("文件解压失败: %v", err)
-		}
-
-		// 创建新会话列出目录内容
-		lsSession, err := client.NewSession()
-		if err != nil {
-			return fmt.Sprintf("创建列目录会话失败: %v", err)
-		}
-		defer lsSession.Close()
-
-		// 执行ls命令显示目录内容
-		lsCmd := fmt.Sprintf("cd %s && ls -la", remoteDir)
-		lsOutput, err := lsSession.CombinedOutput(lsCmd)
-		if err != nil {
-			return fmt.Sprintf("列出目录内容失败: %v", err)
-		}
-		fmt.Printf("解压后的目录内容:\n%s\n", string(lsOutput))
-	}
+	//     // 执行ls命令显示目录内容
+	//     lsCmd := fmt.Sprintf("cd %s && ls -la", remoteDir)
+	//     lsOutput, err := lsSession.CombinedOutput(lsCmd)
+	//     if err != nil {
+	//         return fmt.Sprintf("列出目录内容失败: %v", err)
+	//     }
+	//     fmt.Printf("解压后的目录内容:\n%s\n", string(lsOutput))
+	// }
 
 	return "success"
 }

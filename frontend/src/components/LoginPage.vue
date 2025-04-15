@@ -9,7 +9,7 @@
           <el-input v-model="username" placeholder="请输入用户名" />
         </el-form-item>
         <el-form-item label="密码">
-          <el-input type="password" v-model="password" placeholder="请输入密码" show-password />
+          <el-input type="password" v-model="password" placeholder="请输入密码" show-password @keyup.enter="handleLogin" />
         </el-form-item>
         <el-button type="primary" @click="handleLogin" style="width: 100%">登录</el-button>
       </el-form>

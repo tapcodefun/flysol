@@ -1,49 +1,65 @@
 <template>
   <LoginPage v-if="!isLogin" @login-success="handleLoginSuccess" />
   <div v-else class="host-management">
-    <div class="operation-bar" style="position: relative;">
-      <el-button type="primary" @click="handleAdd">
-        <el-icon><Plus /></el-icon>
-      </el-button>
-      <el-button type="success" @click="loadHostList">
-        <el-icon><RefreshRight /></el-icon>
-      </el-button>
-      <el-input v-model="inputValue" style="width: 200px; margin: 0 10px;" placeholder="请输入主机名称或IP地址" />
-      <el-button type="info" @click="handleButtonClick(inputValue)">
-        <el-icon><Search /></el-icon>
-      </el-button>
-      <el-select v-model="selectedCategory" placeholder="分类" style="width: 120px; margin-right: 10px" clearable @change="filterByCategory">
-        <el-option
-          v-for="item in categories"
-          :key="item"
-          :label="item"
-          @click="handleSortClick(item)"
-        />
-      </el-select>
-      <div style="position:absolute; left: 500px; top:3px; display: flex; align-items: center; gap: 8px;">
+    <div class="operation-bar">
+      <div style="float: left;">
+        <el-button type="primary" @click="handleAdd">
+          <el-icon><Plus /></el-icon>
+        </el-button>
+        <el-button type="success" @click="loadHostList">
+          <el-icon><RefreshRight /></el-icon>
+        </el-button>
+        <el-input v-model="inputValue" style="width: 200px; margin: 0 10px;" placeholder="请输入主机名称或IP地址" />
+        <el-button type="info" @click="handleButtonClick(inputValue)">
+          <el-icon><Search /></el-icon>
+        </el-button>
+        <el-select placeholder="分类" style="width: 120px; margin:0 10px">
+          <el-option
+            v-for="item in categories"
+            :key="item"
+            :label="item"
+            @click="handleSortClick(item)"
+          />
+        </el-select>
+      </div>
+      
+      <!-- <div style="position:absolute; right: -640px; top: 0px; display: flex; align-items: center; gap: 8px;"> -->
+      <div style="float: right; align-items: center; gap: 8px;">
         <ul style="list-style: none; margin: 0; padding: 0; display: flex; gap: 8px; overflow-x: auto; white-space: nowrap;">
-          <li v-for="ip in [...new Set(hostList.map(host => host.masterIP).filter(Boolean))]" :key="ip" 
-              style="padding: 4px 12px; background: #ecf5ff; border: 1px solid #d9ecff; border-radius: 4px; font-size: 13px; color: #409eff; white-space: nowrap;">
-            {{ ip }}
+          <li v-for="ip in masterIPs" :key="ip" 
+              :style="{
+                padding: '4px 12px', 
+                background: getHostByMasterIP(ip)?.masterIPStatus === 'error' ? '#ffecec' : '#ecf5ff', 
+                border: getHostByMasterIP(ip)?.masterIPStatus === 'error' ? '1px solid #ffdbdb' : '1px solid #d9ecff', 
+                borderRadius: '4px', 
+                fontSize: '13px', 
+                color: getHostByMasterIP(ip)?.masterIPStatus === 'error' ? '#f56c6c' : '#409eff', 
+                whiteSpace: 'nowrap'
+              }">
+            {{ getHostByMasterIP(ip)?.masterIPStatus === 'error' ? ip + ' （漫区块 ' + String(getHostByMasterIP(ip)?.blockId).replace('-', '') + '）' : ip +'（' + getHostByMasterIP(ip)?.blockId + '）'  }}
           </li>
         </ul>
       </div>
     </div>
-    <div v-if="isShow" style="display: flex; justify-content: flex-start;">
-      <el-button type="primary" @click="handleCloseConnection">关闭</el-button>
+    <div v-if="isShow" style="display: flex; flex-direction: column; width: 100%;">
+      <div style="display: flex; justify-content: flex-start;">
+        <el-button type="primary" @click="handleCloseConnection">关闭</el-button>
+      </div>
+      <div style="margin-top: 20px; height: 100vh; width: 100%; background-color: #1e1e1e; color: #ffffff;">
+        <component :is="Agent" v-if="isShow" :host="currentHost.ip" :token="currentHost.token" :hostname="currentHost.name"></component>
+      </div>
     </div>
-    <el-table :data="hostList" border style="width: 100%">
-      <el-table-column prop="name" label="主机名称" width="180" />
-      <el-table-column prop="category" label="分类" width="120" />
-      <el-table-column prop="ip" label="IP地址" width="150" />
-      <el-table-column prop="blockId" label="区块ID" width="120"/>
-      <el-table-column prop="cpu" label="CPU" width="100" />
-      <el-table-column prop="pid" label="进程" width="100">
+    <el-table :data="hostList" border style="width: 100%; height: 100%">
+      <el-table-column prop="name" label="主机名称" min-width="180" />
+      <el-table-column prop="category" label="分类" min-width="120" />
+      <el-table-column prop="ip" label="IP地址" min-width="150" />
+      <el-table-column prop="cpu" label="CPU" min-width="100" />
+      <el-table-column prop="pid" label="进程" min-width="100">
         <template #default="{ row }">
           <el-tag v-if="row.pid==-2" @click="handleFetch(row)" style="cursor: pointer;">拉取</el-tag>
           <el-tag v-else-if="row.pid==0">未启动</el-tag>
           <el-tag v-else-if="row.pid==-1">未安装</el-tag>
-          <el-tag v-else>{{row.pid}}</el-tag>
+          <el-tag v-else @click="handleFetch(row)" style="cursor: pointer;">{{row.pid}}</el-tag>
         </template>
       </el-table-column>
       <el-table-column prop="status" label="状态" width="120">
@@ -55,7 +71,7 @@
           <el-button size="small" type="danger" v-if="row.status==='offline' && row.pid>0" @click="handleClose(row)">关闭</el-button>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="355">
+      <el-table-column label="操作" width="260" fixed="right">
         <template #default="{ row }">
             <el-button size="small" @click="handleEdit(row)">编辑</el-button>
             <el-button size="small" type="success" @click="handleConnect(row)">连接</el-button>
@@ -277,6 +293,7 @@
                   <el-option v-for="ip in masterIPs" :key="ip" :label="ip" :value="ip" />
                 </el-select>
                 <el-button type="primary" @click="masterIPDialogVisible = true">添加主节点IP</el-button>
+                <el-button type="danger" @click="handleDeleteMasterIP(formData.masterIP)">删除主节点IP</el-button>
               </div>
             </el-form-item>
           </el-col>
@@ -340,13 +357,16 @@
 import axios from 'axios';
 import { ElLoading } from 'element-plus';
 import { isMacOS,isWindows,OpenURL,loadEnvironment } from './utils/platform';
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, h, createVNode, render } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElMessageBox, install } from 'element-plus'
 import { Plus, RefreshRight, Search } from '@element-plus/icons-vue'
+import Agent from './components/Agent.vue'
 import { UploadFileToRemoteHost,UploadPrivatekey,CreateSSHClient,OpenNewWindow,Install,Uninstall,RunServer,CloseServer,CheckPort,AddServerIP,Setprivatekey,Fetchost,UploadFolderToRemoteHost } from '../wailsjs/go/main/App'
 import LoginPage from './components/LoginPage.vue'
 import { is } from '@babel/types';
+import { get } from 'http';
+import { ca } from 'element-plus/es/locale';
 
 interface ipface {
   ip: string
@@ -375,6 +395,7 @@ interface Host {
   log:string
   category: string
   blockId: string
+  masterIPStatus?: 'normal' | 'error'
 }
 
 const formRef = ref<FormInstance>()
@@ -397,10 +418,6 @@ const selectedFolderFiles = ref<File[]>([])
 const folderInput = ref<HTMLInputElement | null>(null)
 
 const handleCloseConnection = () => {
-  const connectionContainer = document.querySelector('div[style*="margin-top: 20px"]');
-  if (connectionContainer) {
-    connectionContainer.remove();
-  }
   const hostManagement = document.querySelector('.host-management .el-table');
   if (hostManagement) {
     if (hostManagement instanceof HTMLElement) {
@@ -414,6 +431,7 @@ const handleCloseConnection = () => {
     }
   }
   isShow.value = false;
+  currentHost.value = {} as Host;
 };
 
 const newip = ref<ipface>({iface:'',ip:'',status:'await'})
@@ -526,7 +544,6 @@ const deleteHost = async (id: number): Promise<void> => {
   })
 }
 
-
 const loadHostList = async () => {
   try {
     const hosts = await getAllHosts();
@@ -551,10 +568,6 @@ const loadHostList = async () => {
     }));
     hostList.value = updatedHosts;
     originalHostList.value = updatedHosts;
-    // 更新分类列表
-    categories.value = [...new Set(hostList.value.map((host: Host) => host.category))];
-    // 更新主节点IP列表
-    masterIPs.value = [...new Set(hostList.value.map((host: Host) => host.masterIP))];
   } catch (error) {
     console.error('加载数据失败:', error);
     ElMessage.error('数据加载失败');
@@ -577,6 +590,8 @@ const handleAddCategory = () => {
     return
   }
   categories.value.push(newCategory.value)
+  localStorage.setItem('categories', JSON.stringify(categories.value))
+  formData.category = newCategory.value
   newCategory.value = ''
   categoryDialogVisible.value = false
   ElMessage.success('添加成功')
@@ -596,6 +611,8 @@ const handleAddMasterIP = () => {
     return
   }
   masterIPs.value.push(newMasterIP.value)
+  localStorage.setItem('masterIPs', JSON.stringify(masterIPs.value))
+  formData.masterIP = newMasterIP.value
   newMasterIP.value = ''
   masterIPDialogVisible.value = false
   ElMessage.success('添加成功')
@@ -818,7 +835,14 @@ const handleFetch = async (row: Host) => {
         if (hostList.value[index].masterIP) {
           try {
             const blockResponse = await axios.get(`https://sol.tapcode.fun/api/solana/slot?ip=${hostList.value[index].masterIP}`);
+            console.log(blockResponse.data)
             hostList.value[index].blockId = blockResponse.data.data.slot;
+            // 检查响应码，如果是-1，标记该主节点
+            if (blockResponse.data.code === -1) {
+              hostList.value[index].masterIPStatus = 'error';
+            } else {
+              hostList.value[index].masterIPStatus = 'normal';
+            }
           } catch (err) {
             hostList.value[index].blockId = '-';
           }
@@ -832,9 +856,10 @@ const handleFetch = async (row: Host) => {
     ElMessage.error('获取失败');
   }
 }
+const currentHost = ref<Host>({} as Host);
+
 const handleConnect = (host: Host) => {
   const index = hostList.value.findIndex(h => h.id === host.id);
-  var url = 'http://'+host.ip+':5189?model=run&code='+host.token;
   axios.get("http://"+host.ip+":5189/metrics", {
     headers: {'Content-Type': 'application/json'}
   })
@@ -854,20 +879,11 @@ const handleConnect = (host: Host) => {
         operationBar.style.display = 'none';
       }
     }
-    // 在页面底部添加连接显示区域
-    isShow.value = !isShow.value;
-    const connectionContainer = document.createElement('div');
-    connectionContainer.style.marginTop = '20px';
-    connectionContainer.style.height = '100vh';
-    connectionContainer.style.width = '100%';
-    connectionContainer.style.backgroundColor = '#1e1e1e';
-    connectionContainer.style.color = '#ffffff';
-    connectionContainer.innerHTML = `
-      <h3>连接到 ${host.name}</h3>
-      <iframe src="${url}" style="width: 100%; height: 100%; border: none;"></iframe>
-    `;
-    const table = document.querySelector('.el-table');
-    table?.parentNode?.insertBefore(connectionContainer, table.nextSibling);
+    
+    // 设置当前主机并显示Agent组件
+    currentHost.value = host;
+    isShow.value = true;
+    console.log(host.token);
   }).catch(async()=>{
     ElMessage.error('连接失败');
   })
@@ -1021,15 +1037,7 @@ const generateRandomString = (length: number) => {
 
 
 const inputValue = ref('')
-const selectedCategory = ref('')
 
-const filterByCategory = () => {
-  if (!selectedCategory.value) {
-    hostList.value = originalHostList.value
-    return
-  }
-  hostList.value = originalHostList.value.filter(host => host.category === selectedCategory.value)
-}
 // 分类功能
 const handleSortClick = (value: string) => {
   hostList.value = originalHostList.value;
@@ -1116,7 +1124,11 @@ const handleUpload = async () => {
     return;
   }
   
-  ElMessage.info('正在上传文件，请稍候...');
+  const loading = ElLoading.service({
+    lock: true,
+    text: '正在上传文件，请稍候...',
+    background: 'rgba(0, 0, 0, 0.7)'
+  });
   
   try {
     let successCount = 0;
@@ -1150,7 +1162,7 @@ const handleUpload = async () => {
           ElMessage.success(`文件 ${file.name} 上传成功`);
         } else {
           failCount++;
-          ElMessage.error(`文件 ${file.name} 上传失败: ${result}`);
+          ElMessage.error(`文件 ${file.name} 上传失败`);
         }
       } catch (error) {
         failCount++;
@@ -1160,6 +1172,7 @@ const handleUpload = async () => {
     }
     
     // 显示总体上传结果
+    loading.close();
     if (successCount > 0) {
       ElMessage.success(`成功上传 ${successCount} 个文件`);
     }
@@ -1175,6 +1188,7 @@ const handleUpload = async () => {
       uploadRef.value.clearFiles();
     }
   } catch (error) {
+    loading.close();
     console.error('文件上传失败:', error);
     ElMessage.error('文件上传失败: ' + error);
   }
@@ -1375,23 +1389,90 @@ const handleDeleteCategory = (category: string) => {
   const index = categories.value.indexOf(category)
   if (index > -1) {
     categories.value.splice(index, 1)
+    localStorage.setItem('categories', JSON.stringify(categories.value))
+    // const savedCategories = localStorage.getItem('categories')
+    // if (savedCategories) {
+    //   categories.value = JSON.parse(savedCategories)
+    // }
     ElMessage.success('分类删除成功')
     formData.category = ''
   }
 }
 
+const handleDeleteMasterIP = (ip: string) => {
+  if (!ip) {
+    ElMessage.warning('请先选择要删除的主节点IP')
+    return
+  }
+  
+  const hasHostsUsingIP = hostList.value.some(host => host.masterIP === ip)
+  
+  if (hasHostsUsingIP) {
+    ElMessage.warning('该主节点IP正在被使用，无法删除')
+    return
+  }
+  
+  const index = masterIPs.value.indexOf(ip)
+  if (index > -1) {
+    masterIPs.value.splice(index, 1)
+    localStorage.setItem('masterIPs', JSON.stringify(masterIPs.value))
+    ElMessage.success('主节点IP删除成功')
+    formData.masterIP = ''
+  }
+}
+
+// 根据主节点IP获取对应的主机信息
+const getHostByMasterIP = (ip: string) => {
+  return hostList.value.find(host => host.masterIP === ip);
+}
+
 onMounted(async() => {
   await loadEnvironment()
-  loadHostList()
-})
+  await loadHostList()
+  // 添加定时器，每分钟更新一次区块ID
+  const timer = setInterval(async () => {
+    for (let index = 0; index < hostList.value.length; index++) {
+      const host = hostList.value[index];
+      if (host.status === 'online' && host.masterIP) {
+        try {
+          const blockResponse = await axios.get(`https://sol.tapcode.fun/api/solana/slot?ip=${host.masterIP}`);
+          hostList.value[index].blockId = blockResponse.data.data.slot;
+          // 检查响应码，如果是-1，标记该主节点
+          if (blockResponse.data.code === -1) {
+            hostList.value[index].masterIPStatus = 'error';
+          } else {
+            hostList.value[index].masterIPStatus = 'normal';
+          }
+        } catch (err) {
+          hostList.value[index].blockId = '-';
+        }
+      }
+    }
+  }, 60000);
+
+  // 组件卸载时清除定时器
+  onUnmounted(() => {
+    clearInterval(timer);
+  });
+  const savedCategories = localStorage.getItem('categories')
+  const savedMasterIPs = localStorage.getItem('masterIPs')
+  if (savedCategories) {
+    categories.value = JSON.parse(savedCategories)
+  }
+  if (savedMasterIPs) {
+    masterIPs.value = JSON.parse(savedMasterIPs)
+  }
+});
 </script>
 
 <style scoped>
 .host-management {
+  width: 100%;
   padding: 20px;
 }
 
 .operation-bar {
+  width: 100%;
   margin-bottom: 20px;
   float: left;
 }
