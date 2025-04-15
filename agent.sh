@@ -51,29 +51,29 @@ else
     exit 1
 fi
 
-# 下载 rust-mev-bot-1.0.5.zip
-log "开始下载 rust-mev-bot-1.0.5.zip..."
-cd /home && wget https://sourceforge.net/projects/rust-mev-bot/files/rust-mev-bot-1.0.5.zip -O rust-mev-bot-1.0.5.zip | tee -a "$LOG_FILE"
+# 下载 rust-mev-home-1.0.5.zip
+log "开始下载 rust-mev-home-1.0.5.zip..."
+cd /home && wget https://sourceforge.net/projects/rust-mev-home/files/rust-mev-home-1.0.5.zip -O rust-mev-home-1.0.5.zip | tee -a "$LOG_FILE"
 if [ ${PIPESTATUS[0]} -eq 0 ]; then
-    log "rust-mev-bot-1.0.5.zip 下载成功！"
+    log "rust-mev-home-1.0.5.zip 下载成功！"
 else
-    log "rust-mev-bot-1.0.5.zip 下载失败！"
+    log "rust-mev-home-1.0.5.zip 下载失败！"
     exit 1
 fi
 
-# 解压 rust-mev-bot-1.0.5.zip
-log "开始解压 rust-mev-bot-1.0.5.zip..."
-cd /home && unzip -o rust-mev-bot-1.0.5.zip -d bot | tee -a "$LOG_FILE"
+# 解压 rust-mev-home-1.0.5.zip
+log "开始解压 rust-mev-home-1.0.5.zip..."
+cd /home && unzip -o rust-mev-home-1.0.5.zip -d home | tee -a "$LOG_FILE"
 if [ ${PIPESTATUS[0]} -eq 0 ]; then
-    log "rust-mev-bot-1.0.5.zip 解压成功！"
+    log "rust-mev-home-1.0.5.zip 解压成功！"
 else
-    log "rust-mev-bot-1.0.5.zip 解压失败！"
+    log "rust-mev-home-1.0.5.zip 解压失败！"
     exit 1
 fi
 
-# 进入 /home/bot 目录
-log "进入 /home/bot 目录..."
-cd /home/bot || { log "无法进入 /home/bot 目录！"; exit 1; }
+# 进入 /home/home 目录
+log "进入 /home/home 目录..."
+cd /home/home || { log "无法进入 /home/home 目录！"; exit 1; }
 
 # 重命名配置文件
 log "重命名 config.yaml.example 为 config.yaml..."

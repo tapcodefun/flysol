@@ -37,8 +37,13 @@
         </ul>
       </div>
     </div>
-    <div v-if="isShow" style="display: flex; justify-content: flex-start;">
-      <el-button type="primary" @click="handleCloseConnection">关闭</el-button>
+    <div v-if="isShow" style="display: flex; flex-direction: column; width: 100%;">
+      <div style="display: flex; justify-content: flex-start;">
+        <el-button type="primary" @click="handleCloseConnection">关闭</el-button>
+      </div>
+      <div style="margin-top: 20px; height: 100vh; width: 100%; background-color: #1e1e1e; color: #ffffff;">
+        <component :is="Agent" v-if="isShow" :host="currentHost.ip" :token="currentHost.token" :hostname="currentHost.name"></component>
+      </div>
     </div>
     <el-table :data="hostList" border style="width: 100%">
       <el-table-column prop="name" label="主机名称" width="180" />
@@ -349,10 +354,11 @@
 import axios from 'axios';
 import { ElLoading } from 'element-plus';
 import { isMacOS,isWindows,OpenURL,loadEnvironment } from './utils/platform';
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, h, createVNode, render } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElMessageBox, install } from 'element-plus'
 import { Plus, RefreshRight, Search } from '@element-plus/icons-vue'
+import Agent from './components/Agent.vue'
 import { UploadFileToRemoteHost,UploadPrivatekey,CreateSSHClient,OpenNewWindow,Install,Uninstall,RunServer,CloseServer,CheckPort,AddServerIP,Setprivatekey,Fetchost,UploadFolderToRemoteHost } from '../wailsjs/go/main/App'
 import LoginPage from './components/LoginPage.vue'
 import { is } from '@babel/types';
@@ -408,10 +414,6 @@ const selectedFolderFiles = ref<File[]>([])
 const folderInput = ref<HTMLInputElement | null>(null)
 
 const handleCloseConnection = () => {
-  const connectionContainer = document.querySelector('div[style*="margin-top: 20px"]');
-  if (connectionContainer) {
-    connectionContainer.remove();
-  }
   const hostManagement = document.querySelector('.host-management .el-table');
   if (hostManagement) {
     if (hostManagement instanceof HTMLElement) {
@@ -425,6 +427,7 @@ const handleCloseConnection = () => {
     }
   }
   isShow.value = false;
+  currentHost.value = {} as Host;
 };
 
 const newip = ref<ipface>({iface:'',ip:'',status:'await'})
@@ -850,9 +853,10 @@ const handleFetch = async (row: Host) => {
     ElMessage.error('获取失败');
   }
 }
+const currentHost = ref<Host>({} as Host);
+
 const handleConnect = (host: Host) => {
   const index = hostList.value.findIndex(h => h.id === host.id);
-  var url = 'http://'+host.ip+':5189?model=run&code='+host.token;
   axios.get("http://"+host.ip+":5189/metrics", {
     headers: {'Content-Type': 'application/json'}
   })
@@ -872,20 +876,11 @@ const handleConnect = (host: Host) => {
         operationBar.style.display = 'none';
       }
     }
-    // 在页面底部添加连接显示区域
-    isShow.value = !isShow.value;
-    const connectionContainer = document.createElement('div');
-    connectionContainer.style.marginTop = '20px';
-    connectionContainer.style.height = '100vh';
-    connectionContainer.style.width = '100%';
-    connectionContainer.style.backgroundColor = '#1e1e1e';
-    connectionContainer.style.color = '#ffffff';
-    connectionContainer.innerHTML = `
-      <h3>连接到 ${host.name}</h3>
-      <iframe src="${url}" style="width: 100%; height: 100%; border: none;"></iframe>
-    `;
-    const table = document.querySelector('.el-table');
-    table?.parentNode?.insertBefore(connectionContainer, table.nextSibling);
+    
+    // 设置当前主机并显示Agent组件
+    currentHost.value = host;
+    isShow.value = true;
+    console.log(host.token);
   }).catch(async()=>{
     ElMessage.error('连接失败');
   })
