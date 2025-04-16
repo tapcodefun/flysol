@@ -22,9 +22,9 @@
           />
         </el-select>
         <el-select v-model="selectedFunction" placeholder="功能" style="width: 80px; margin:0 10px" @change="handleFunctionChange">
-          <el-option value="start">一键启动</el-option>
-          <el-option value="stop">一键关闭</el-option>
-          <el-option value="fetch">一键拉取</el-option>
+          <el-option value="start">全部启动</el-option>
+          <el-option value="stop">全部关闭</el-option>
+          <el-option value="fetch">全部拉取</el-option>
         </el-select>
       </div>
       

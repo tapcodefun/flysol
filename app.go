@@ -18,7 +18,7 @@ import (
 	"golang.org/x/crypto/ssh"
 	"k8s.io/apimachinery/pkg/util/rand"
 	yaml "sigs.k8s.io/yaml/goyaml.v2"
-	// "runtime"
+	"runtime"
 	// "os/exec"
 )
 
@@ -1021,16 +1021,24 @@ func (a *App) UploadFolderToRemoteHost(host string, user string, password string
 }
 
  func (a *App) UploadPrivatekey(host string, user string, password string, port string) string {
-	// 获取系统配置目录
-	configDir, err := os.UserConfigDir()
+	// 获取用户主目录
+	userHomeDir, err := os.UserHomeDir()
 	if err != nil {
-		return fmt.Sprintf("获取系统配置目录失败: %v", err)
+		return fmt.Sprintf("获取用户主目录失败: %v", err)
 	}
 
-	// 创建应用专用的配置目录
-	appConfigDir := filepath.Join(configDir, "flysol", "keys")
-	if err := os.MkdirAll(appConfigDir, 0700); err != nil {
-		return fmt.Sprintf("创建应用配置目录失败: %v", err)
+	// 判断操作系统
+	var privatekeyDir string
+	if runtime.GOOS == "windows" {
+		// 如果是 Windows 系统，将文件夹创建在 C 盘
+		privatekeyDir = filepath.Join("C:\\", "privatekey")
+	} else {
+		// 其他操作系统将文件夹创建在桌面
+		privatekeyDir = filepath.Join(userHomeDir, "Desktop", "privatekey")
+	}
+
+	if err := os.MkdirAll(privatekeyDir, 0700); err != nil {
+		return fmt.Sprintf("创建私钥目录失败: %v", err)
 	}
 
 	// 创建SSH连接
@@ -1056,8 +1064,8 @@ func (a *App) UploadFolderToRemoteHost(host string, user string, password string
 
 	// 生成唯一的文件名
 	timeStamp := time.Now().Format("20060102150405")
-	localFileName := fmt.Sprintf("private_key_%s", timeStamp)
-	localFilePath := filepath.Join(appConfigDir, localFileName)
+	localFileName := fmt.Sprintf("%v_%s", host, timeStamp)
+	localFilePath := filepath.Join(privatekeyDir, localFileName)
 
 	// 创建本地文件
 	localFile, err := os.Create(localFilePath)
