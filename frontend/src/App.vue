@@ -1510,6 +1510,7 @@ onMounted(async() => {
 .host-management {
   width: 100%;
   max-width: 1600px;
+  min-height: 600px;
   margin: 0 auto;
   padding: 20px;
   box-sizing: border-box;
@@ -1517,7 +1518,7 @@ onMounted(async() => {
 
 .operation-bar {
   width: 100%;
-  margin-bottom: 20px;
+  margin-bottom: 40px;
   display: flex;
   justify-content: space-between;
   align-items: center;

@@ -69,12 +69,12 @@
   // const hosturl = computed(() => props.hosturl);
   const saveConfig = async () => {
     try {
-      const response = await fetch(hosturl+'/config', {
-        method: 'POST', // 指定请求方法为 POST
+      const response = await fetch(`http://${host.value}:5189/config?code=${token.value}`, {
+        method: 'POST',
         headers: {
-          'Content-Type': 'application/json', // 设置请求头，指定发送的数据格式为 JSON
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify({file:'',content:yamlContent.value}), // 将配置数据转换为 JSON 字符串并放入请求体
+        body: JSON.stringify({file:'',content:yamlContent.value}),
       });
   
       if (response.ok) {
