@@ -28,8 +28,7 @@
         </el-select>
       </div>
       
-      <!-- <div style="position:absolute; right: -640px; top: 0px; display: flex; align-items: center; gap: 8px;"> -->
-      <div style="float: right; align-items: center; gap: 8px;">
+      <div style="float:right; align-items: center; gap: 8px;">
         <ul style="list-style: none; margin: 0; padding: 0; display: flex; gap: 8px; overflow-x: auto; white-space: nowrap;">
           <li v-for="ip in masterIPs" :key="ip" 
               :style="{
@@ -47,7 +46,7 @@
       </div>
     </div>
     <div v-if="isShow" style="display: flex; flex-direction: column; width: 100%;">
-      <div style="margin-top: 20px; height: 100vh; width: 100%; background-color: #1e1e1e; color: #ffffff;">
+      <div style="height: 100%; width: 100%; overflow-x: hidden; background-color: #1e1e1e; color: #ffffff;">
         <component :is="Agent" v-if="isShow" :host="currentHost.ip" :token="currentHost.token" :hostname="currentHost.name" @close="handleCloseConnection"></component>
       </div>
     </div>
@@ -1510,13 +1509,18 @@ onMounted(async() => {
 <style scoped>
 .host-management {
   width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
   padding: 20px;
+  box-sizing: border-box;
 }
 
 .operation-bar {
   width: 100%;
   margin-bottom: 20px;
-  float: left;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .el-table {

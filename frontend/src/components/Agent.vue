@@ -256,10 +256,13 @@
     display: flex;
     flex-direction: column;
     height: 100vh;
+    width: 100%;
     background: #1e1e1e;
+    margin-top: 0px;
   }
   
   .button-container {
+    height: 40px;
     padding: 12px;
     background: #252526;
     border-bottom: 1px solid #333;
@@ -332,7 +335,7 @@
     right: 0;
     bottom: 0;
     overflow: hidden;
-    padding: 0 8px 8px 0;
+    padding: 0;
     background: #1e1e1e;
     text-align: left;
   }
