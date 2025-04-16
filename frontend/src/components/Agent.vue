@@ -17,6 +17,7 @@
         <button @click="toggleView" class="cmd-button">
           {{ showEditor ? '显示命令行' : '显示文件编辑' }}
         </button>
+        <button class="cmd-button" @click="$emit('close')">关闭</button>
         <div class="host-display">当前主机: {{ hostname }}</div>
       </div>
       <div class="content-container">
@@ -123,8 +124,12 @@
   
   const fetchConfig = async () => {
     try {
-      console.log(host.value+':5189'+'/config');
-      const response = await fetch('http://'+host.value+':5189'+'/config');
+      const response = await fetch(`http://${host.value}:5189/config?code=${token.value}`, {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
       if (response.ok) {
         const content = await response.json();
         yamlContent.value = content.message;
@@ -138,7 +143,12 @@
   
   const fetchScreen = async () => {
     try {
-      const response = await fetch(host.value+':5189'+'/screen');
+      const response = await fetch(`http://${host.value}:5189/screen?code=${token.value}`, {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
       if (response.ok) {
         const content = await response.json();
         if(content.error){

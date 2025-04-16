@@ -21,6 +21,11 @@
             @click="handleSortClick(item)"
           />
         </el-select>
+        <el-select v-model="selectedFunction" placeholder="功能" style="width: 80px; margin:0 10px" @change="handleFunctionChange">
+          <el-option value="start">一键启动</el-option>
+          <el-option value="stop">一键关闭</el-option>
+          <el-option value="fetch">一键拉取</el-option>
+        </el-select>
       </div>
       
       <!-- <div style="position:absolute; right: -640px; top: 0px; display: flex; align-items: center; gap: 8px;"> -->
@@ -42,11 +47,8 @@
       </div>
     </div>
     <div v-if="isShow" style="display: flex; flex-direction: column; width: 100%;">
-      <div style="display: flex; justify-content: flex-start;">
-        <el-button type="primary" @click="handleCloseConnection">关闭</el-button>
-      </div>
       <div style="margin-top: 20px; height: 100vh; width: 100%; background-color: #1e1e1e; color: #ffffff;">
-        <component :is="Agent" v-if="isShow" :host="currentHost.ip" :token="currentHost.token" :hostname="currentHost.name"></component>
+        <component :is="Agent" v-if="isShow" :host="currentHost.ip" :token="currentHost.token" :hostname="currentHost.name" @close="handleCloseConnection"></component>
       </div>
     </div>
     <el-table :data="hostList" border style="width: 100%; height: 100%">
@@ -358,6 +360,45 @@ import axios from 'axios';
 import { ElLoading } from 'element-plus';
 import { isMacOS,isWindows,OpenURL,loadEnvironment } from './utils/platform';
 import { ref, reactive, onMounted, onUnmounted, h, createVNode, render } from 'vue'
+
+const selectedFunction = ref('')
+
+const handleFunctionChange = (value: string) => {
+  if (!value) return
+  
+  const filteredHosts = hostList.value.filter(host => {
+    if (inputValue.value) {
+      return host.name.includes(inputValue.value) || host.ip.includes(inputValue.value)
+    }
+    return true
+  })
+
+  switch (value) {
+    case 'start':
+      filteredHosts.forEach(host => {
+        if (host.status === 'offline') {
+          handleStart(host)
+        }
+      })
+      break
+    case 'stop':
+      filteredHosts.forEach(host => {
+        if (host.status === 'online') {
+          handleClose(host)
+        }
+      })
+      break
+    case 'fetch':
+      filteredHosts.forEach(host => {
+        if (host.pid === -2) {
+          handleFetch(host)
+        }
+      })
+      break
+  }
+  
+  selectedFunction.value = ''
+}
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElMessageBox, install } from 'element-plus'
 import { Plus, RefreshRight, Search } from '@element-plus/icons-vue'
@@ -1216,7 +1257,7 @@ const handlePrivateKey = async (row: any) => {
     ElMessage.info('正在连接并获取私钥文件...')
     const privateKey = await UploadPrivatekey(row.ip, row.username, row.password, row.port+'')
     if (!privateKey.includes('失败')) {
-      ElMessage.success('私钥文件已下载到桌面')
+      ElMessage.success('私钥文件已下载到:' + privateKey)
     } else {
       ElMessage.error(privateKey)
     }
@@ -1394,6 +1435,7 @@ const handleDeleteCategory = (category: string) => {
     // if (savedCategories) {
     //   categories.value = JSON.parse(savedCategories)
     // }
+    console.log(categories.value)
     ElMessage.success('分类删除成功')
     formData.category = ''
   }
