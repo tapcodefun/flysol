@@ -335,7 +335,7 @@
     right: 0;
     bottom: 0;
     overflow: hidden;
-    padding: 0;
+    padding: 0 0 0 12px;
     background: #1e1e1e;
     text-align: left;
   }
