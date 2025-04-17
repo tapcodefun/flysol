@@ -109,7 +109,7 @@ func (a *App) Uninstall(sshhost string, sshpassword string, sshuser string, sshp
 	// 返回所有步骤的结果
 	return "success"
 }
-func (a *App) Install(sshhost string, privateKey string, sshpassword string, sshuser string, sshport string) string {
+func (a *App) Install(sshhost string, privateKey string, sshpassword string, sshuser string, sshport string, directory string) string {
 	client, err := sshClient(sshhost, privateKey, sshpassword, sshuser, sshport)
 	if err != nil {
 		return fmt.Sprintf("Failed Client: %s", err)
@@ -148,9 +148,9 @@ func (a *App) Install(sshhost string, privateKey string, sshpassword string, ssh
 	// 启动一个命令并保持会话
 	var cmd string
 	if privateKey == "" {
-		cmd = "cd /home && wget -O agent.tar.gz https://down.tapcode.work/agent.tar.gz?v=" + randomNumber + " && tar -xzvf agent.tar.gz"
+		cmd = "cd /" + directory + " && wget -O agent.tar.gz https://down.tapcode.work/agent.tar.gz?v=" + randomNumber + " && tar -xzvf agent.tar.gz"
 	} else {
-		cmd = fmt.Sprintf("echo '%s' > /home/privateKey && chmod 600 /home/privateKey && cd /home && wget -O agent.tar.gz https://down.tapcode.work/agent.tar.gz?v=%s && tar -xzvf agent.tar.gz", privateKey, randomNumber)
+		cmd = fmt.Sprintf("echo '%s' > /%s/privateKey && chmod 600 /home/privateKey && cd /home && wget -O agent.tar.gz https://down.tapcode.work/agent.tar.gz?v=%s && tar -xzvf agent.tar.gz", privateKey, directory, randomNumber)
 	}
 	fmt.Print(cmd)
 	if err := session.Start(cmd); err != nil {

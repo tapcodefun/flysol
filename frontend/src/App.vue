@@ -282,8 +282,8 @@
                 <el-select v-model="formData.category" style="width: 200px; margin-right: 10px;">
                   <el-option v-for="cat in categories" :key="cat" :label="cat" :value="cat" />
                 </el-select>
-                <el-button type="primary" @click="categoryDialogVisible = true">添加分类</el-button>
-                <el-button type="danger" @click="handleDeleteCategory(formData.category)">删除分类</el-button>
+                <el-button type="primary" @click="categoryDialogVisible = true">添加</el-button>
+                <el-button type="danger" @click="handleDeleteCategory(formData.category)">删除</el-button>
               </div>
             </el-form-item>
           </el-col>
@@ -293,9 +293,14 @@
                 <el-select v-model="formData.masterIP" style="width: 200px; margin-right: 10px;">
                   <el-option v-for="ip in masterIPs" :key="ip" :label="ip" :value="ip" />
                 </el-select>
-                <el-button type="primary" @click="masterIPDialogVisible = true">添加主节点IP</el-button>
-                <el-button type="danger" @click="handleDeleteMasterIP(formData.masterIP)">删除主节点IP</el-button>
+                <el-button type="primary" @click="masterIPDialogVisible = true">添加</el-button>
+                <el-button type="danger" @click="handleDeleteMasterIP(formData.masterIP)">删除</el-button>
               </div>
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="安装目录" prop="token">
+              <el-input v-model="formData.directory" />
             </el-form-item>
           </el-col>
           <el-col  :span="24" v-if="formData.token">
@@ -436,6 +441,7 @@ interface Host {
   category: string
   blockId: string
   masterIPStatus?: 'normal' | 'error'
+  directory?: string
 }
 
 const formRef = ref<FormInstance>()
@@ -505,7 +511,8 @@ const formData = reactive<Omit<Host, 'id' | 'status'>>({
   log:'',
   category: '',
   masterIP: '',
-  blockId: ''
+  blockId: '',
+  directory:"/home"
 })
 
 const formRules = reactive<FormRules>({
@@ -973,7 +980,7 @@ const handleTestConnection = async () => {
       return ElMessage.error('密码不能为空');
     }
     ElMessage.info(`正在连接 ${hostData.ip}`);
-    Install(hostData.ip,hostData.private_key, hostData.password || '',hostData.username,hostData.port+"").then((res) => {
+    Install(hostData.ip,hostData.private_key, hostData.password || '',hostData.username,hostData.port+"",hostData.directory+"").then((res) => {
       if (res === 'success') {
         // 使用 Vue 的响应式方法确保更新
         formData.install = "finish";
