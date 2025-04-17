@@ -33,9 +33,13 @@ const handleLogin = () => {
     password: password.value
   })
   .then(response => {
-    localStorage.removeItem('token')
-    localStorage.setItem('token', response.data.data.token)
-    emit('login-success')
+    if (response.data.code === 0) {
+      localStorage.removeItem('token')
+      localStorage.setItem('token', response.data.data.token)
+      emit('login-success')
+    }else{
+      ElMessage.error(response.data.msg)
+    }
   })
   .catch(error => {
     ElMessage.error('用户名或密码错误')
