@@ -18,7 +18,9 @@
           {{ showEditor ? '显示命令行' : '显示文件编辑' }}
         </button>
         <button class="cmd-button" @click="$emit('close')">关闭</button>
-        <div class="host-display">当前主机: {{ hostname }}</div>
+        <el-select v-model="selectedHost" class="host-display" :placeholder="hostname" @change="handleHostChange" size="large" @keydown.alt.up.prevent="selectPrevHost" @keydown.alt.down.prevent="selectNextHost">
+          <el-option v-for="host in connectedHosts" :key="host.ip" :value="host.name" :label="host.name" />
+        </el-select>
       </div>
       <div class="content-container">
         <div :class="['editor-container', { 'hidden': !showEditor }]">
@@ -31,11 +33,13 @@
   
   <script lang="ts" setup>
   import YamlEditor from './YamlEditor.vue';
-  import { onMounted, ref, computed } from 'vue';
+  import { onMounted, ref, computed, onUnmounted } from 'vue';
+  import { PropType } from 'vue';
   import { Terminal } from '@xterm/xterm';
   import { FitAddon } from '@xterm/addon-fit';
   import '@xterm/xterm/css/xterm.css';
   import { defineProps } from 'vue';
+import { ElMessage } from 'element-plus';
   
   const terminalContainer = ref<HTMLElement | null>(null);
   const socket = ref<WebSocket | null>(null);
@@ -54,12 +58,26 @@
     hostname: {
       type: String,
       default: ''
+    },
+    connectedHosts: {
+      type: Array as PropType<Array<{name: string; ip: string}>>,
+      default: () => []
     }
   });
+  const connectedHosts = computed(() => props.connectedHosts);
   const host = computed(() => props.host);
   const token = computed(() => props.token);
   const hostname = computed(() => props.hostname);
+  const selectedHost = ref(hostname.value);
   const hosturl = `http://${host.value}:5189?model=run&code=${token.value}`
+
+  const emit = defineEmits(['switch-host', 'close']);
+  
+  const handleHostChange = (value: string) => {
+    if (value !== hostname.value) {
+        emit('switch-host', value);
+    }
+  };
   // const props = defineProps({
   //   hosturl:{
   //     type:String,
@@ -102,6 +120,33 @@
       terminal.value?.writeln('\x1b[31mError: Not connected to server\x1b[0m');
     }
   }
+  const selectPrevHost = (e: KeyboardEvent) => {
+    if (e.altKey && e.key === 'ArrowUp') {
+      e.preventDefault();
+      const currentIndex = connectedHosts.value.findIndex(h => h.name === selectedHost.value);
+      if (currentIndex > 0) {
+        selectedHost.value = connectedHosts.value[currentIndex - 1].name;
+        handleHostChange(selectedHost.value);
+      } else if (currentIndex === 0 && connectedHosts.value.length > 0) {
+        selectedHost.value = connectedHosts.value[connectedHosts.value.length - 1].name;
+        handleHostChange(selectedHost.value);
+      }
+    }
+  };
+  
+  const selectNextHost = (e: KeyboardEvent) => {
+    if (e.altKey && e.key === 'ArrowDown') {
+      e.preventDefault();
+      const currentIndex = connectedHosts.value.findIndex(h => h.name === selectedHost.value);
+      if (currentIndex < connectedHosts.value.length - 1) {
+        selectedHost.value = connectedHosts.value[currentIndex + 1].name;
+        handleHostChange(selectedHost.value);
+      } else if (currentIndex === connectedHosts.value.length - 1 && connectedHosts.value.length > 0) {
+        selectedHost.value = connectedHosts.value[0].name;
+        handleHostChange(selectedHost.value);
+      }
+    }
+  };
   const sendCommand = (command: string) => {
     showEditor.value = false;
     if (socket.value?.readyState === WebSocket.OPEN && terminal.value) {
@@ -225,6 +270,9 @@
   }
   
   onMounted(() => {
+    window.addEventListener('keydown', selectPrevHost);
+    window.addEventListener('keydown', selectNextHost);
+
     if (terminalContainer.value) {
       terminal.value = new Terminal({
         cursorBlink: true,
@@ -248,6 +296,11 @@
     }
     fetchConfig();
     fetchScreen();
+
+    onUnmounted(() => {
+      window.removeEventListener('keydown', selectPrevHost);
+      window.removeEventListener('keydown', selectNextHost);
+    });
   });
   </script>
   
@@ -314,12 +367,7 @@
   
   .host-display {
     margin-left: auto;
-    background: #2a2a2a;
-    color: #d4d4d4;
-    padding: 8px 16px;
-    border-radius: 4px;
-    font-size: 13px;
-    border: 1px solid #4d4d4d;
+    width: 120px;
   }
   
   .content-container {

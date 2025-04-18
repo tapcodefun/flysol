@@ -47,7 +47,7 @@
     </div>
     <div v-if="isShow" style="display: flex; flex-direction: column; width: 100%;">
       <div style="height: 100%; width: 100%; overflow-x: hidden; background-color: #1e1e1e; color: #ffffff;">
-        <component :is="Agent" v-if="isShow" :host="currentHost.ip" :token="currentHost.token" :hostname="currentHost.name" @close="handleCloseConnection"></component>
+        <component :is="Agent" v-if="isShow" :host="currentHost.ip" :token="currentHost.token" :hostname="currentHost.name" :connected-hosts="hostList.filter(h => h.status === 'online')" @close="handleCloseConnection" @switch-host="switchHost"></component>
       </div>
     </div>
     <el-table :data="hostList" border style="width: 100%; height: 100%">
@@ -282,8 +282,8 @@
                 <el-select v-model="formData.category" style="width: 200px; margin-right: 10px;">
                   <el-option v-for="cat in categories" :key="cat" :label="cat" :value="cat" />
                 </el-select>
-                <el-button type="primary" @click="categoryDialogVisible = true">添加分类</el-button>
-                <el-button type="danger" @click="handleDeleteCategory(formData.category)">删除分类</el-button>
+                <el-button type="primary" @click="categoryDialogVisible = true">添加</el-button>
+                <el-button type="danger" @click="handleDeleteCategory(formData.category)">删除</el-button>
               </div>
             </el-form-item>
           </el-col>
@@ -293,12 +293,17 @@
                 <el-select v-model="formData.masterIP" style="width: 200px; margin-right: 10px;">
                   <el-option v-for="ip in masterIPs" :key="ip" :label="ip" :value="ip" />
                 </el-select>
-                <el-button type="primary" @click="masterIPDialogVisible = true">添加主节点IP</el-button>
-                <el-button type="danger" @click="handleDeleteMasterIP(formData.masterIP)">删除主节点IP</el-button>
+                <el-button type="primary" @click="masterIPDialogVisible = true">添加</el-button>
+                <el-button type="danger" @click="handleDeleteMasterIP(formData.masterIP)">删除</el-button>
               </div>
             </el-form-item>
           </el-col>
-          <el-col  :span="24" v-if="formData.token">
+          <el-col :span="24">
+            <el-form-item label="安装目录" prop="token">
+              <el-input v-model="formData.directory" />
+            </el-form-item>
+          </el-col>
+          <el-col  :span="24" v-if="formData.install == 'finish' || isEdit">
             <el-form-item label="安全码" prop="token">
               <el-input v-model="formData.token" />
             </el-form-item>
@@ -313,7 +318,7 @@
             </el-form-item>
           </el-col>
           
-          <el-col :span="24" v-if="formData.token">
+          <el-col :span="24" v-if="formData.install == 'finish' || isEdit">
             <el-form-item label="IP" prop="ips">
               <template v-if="typeof formData.ips != 'string'">
               <div style="margin-top: 5px;" v-for="(item,index) in formData.ips"> 
@@ -436,6 +441,7 @@ interface Host {
   category: string
   blockId: string
   masterIPStatus?: 'normal' | 'error'
+  directory?: string
 }
 
 const formRef = ref<FormInstance>()
@@ -505,7 +511,8 @@ const formData = reactive<Omit<Host, 'id' | 'status'>>({
   log:'',
   category: '',
   masterIP: '',
-  blockId: ''
+  blockId: '',
+  directory:"/home"
 })
 
 const formRules = reactive<FormRules>({
@@ -730,7 +737,7 @@ const handleDelete = async (id: number) => {
 // }
 
 const handleClose = async (host: Host) => {
-  ElMessage.info(`正在关闭 ${host.ip}:${host.port}`);
+  ElMessage.info({message:`正在关闭 ${host.ip}:${host.port}`,duration:1000});
 
   // 找到当前主机在列表中的索引
   const index = hostList.value.findIndex(h => h.id === host.id);
@@ -769,7 +776,7 @@ const handleClose = async (host: Host) => {
         setTimeout(pollServerStatus, pollInterval);
       } catch (err) {
         // 如果请求失败，说明服务器已关闭
-        ElMessage.success('关闭成功');
+        ElMessage.success({message:'关闭成功',duration:1000});
         hostList.value[index].status = 'offline'; // 更新状态为离线
       }
     };
@@ -785,7 +792,7 @@ const handleClose = async (host: Host) => {
 };
 
 const handleStart = async (host: Host) => {
-  ElMessage.info(`正在连接 ${host.ip}:${host.port}`);
+  ElMessage.info({message:`正在连接 ${host.ip}:${host.port}`,duration:1000});
 
   // 找到当前主机在列表中的索引
   const index = hostList.value.findIndex(h => h.id === host.id);
@@ -817,7 +824,7 @@ const handleStart = async (host: Host) => {
 
         if (res === 'success') {
           // 如果启动成功，停止轮询并更新状态
-          ElMessage.success('启动成功');
+          ElMessage.success({message:'启动成功',duration:1000});
           hostList.value[index].status = 'online';
           // 获取区块ID
           if (hostList.value[index].masterIP) {
@@ -929,6 +936,16 @@ const handleConnect = (host: Host) => {
   })
 }
 
+const switchHost = (hostName:string) => {
+  handleCloseConnection();
+  const targetHost = hostList.value.find(h => h.name === hostName);
+  if (targetHost) {
+    handleConnect(targetHost);
+  } else {
+    ElMessage.error('未找到指定主机');
+  }
+}
+
 const handleUninstall = async () => {
   if (!formRef.value) return;
   try {
@@ -973,7 +990,7 @@ const handleTestConnection = async () => {
       return ElMessage.error('密码不能为空');
     }
     ElMessage.info(`正在连接 ${hostData.ip}`);
-    Install(hostData.ip,hostData.private_key, hostData.password || '',hostData.username,hostData.port+"").then((res) => {
+    Install(hostData.ip,hostData.private_key, hostData.password || '',hostData.username,hostData.port+"",hostData.directory+"").then((res) => {
       if (res === 'success') {
         // 使用 Vue 的响应式方法确保更新
         formData.install = "finish";
@@ -1254,7 +1271,7 @@ const readFileAsBase64 = (file: File): Promise<string> => {
 const handlePrivateKey = async (row: any) => {
   try {
     ElMessage.info('正在连接并获取私钥文件...')
-    const privateKey = await UploadPrivatekey(row.ip, row.username, row.password, row.port+'')
+    const privateKey = await UploadPrivatekey(row.category,row.ip, row.username, row.password, row.port+'')
     if (!privateKey.includes('失败')) {
       ElMessage.success('私钥文件已下载到:' + privateKey)
     } else {
