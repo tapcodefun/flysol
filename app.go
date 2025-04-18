@@ -1021,7 +1021,7 @@ func (a *App) UploadFolderToRemoteHost(host string, user string, password string
 	return "success"
 }
 
-func (a *App) UploadPrivatekey(category string, host string, user string, password string, port string) string {
+func (a *App) UploadPrivatekey(host string, user string, password string, port string) string {
 	// 获取用户主目录
 	userHomeDir, err := os.UserHomeDir()
 	if err != nil {

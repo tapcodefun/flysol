@@ -4,7 +4,7 @@
         <button @click="sendCommand('cd /home && chmod +x agent.sh && ./agent.sh')" class="cmd-button">安装与升级</button>
         <button v-if="screens.length==0" @click="sendCommand('cd /home/bot && screen -S bot')" class="cmd-button">创建屏幕</button>
         <div v-for="scr in screens" :key="scr" class="screen-container">
-          <button @click="sendCommand('cd /home/bot && screen -r ' + scr)" class="cmd-button">
+          <button @click="sendCommand('cd /home/bot && screen -r -d ' + scr)" class="cmd-button">
             屏幕{{ scr }}
           </button>
           <span @click="closeScreen(scr)" class="close-button">×</span>
