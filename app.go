@@ -1021,7 +1021,7 @@ func (a *App) UploadFolderToRemoteHost(host string, user string, password string
 	return "success"
 }
 
-func (a *App) UploadPrivatekey(host string, user string, password string, port string) string {
+func (a *App) UploadPrivatekey(category string,host string, user string, password string, port string) string {
 	// 获取用户主目录
 	userHomeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -1071,7 +1071,7 @@ func (a *App) UploadPrivatekey(host string, user string, password string, port s
 	defer remoteFile.Close()
 
 	// 生成唯一的文件名
-	localFileName := fmt.Sprintf("%v", host)
+	localFileName := fmt.Sprintf("PRIVATE_KEY")
 	localFilePath := filepath.Join(hostDir, localFileName)
 
 	// 创建本地文件
