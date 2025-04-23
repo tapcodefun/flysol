@@ -1,7 +1,7 @@
 <template>
   <LoginPage v-if="!isLogin" @login-success="handleLoginSuccess" />
   <div v-else class="host-management">
-    <div class="operation-bar">
+    <div class="operation-bar" v-show="!isShow">
       <div style="float: left;">
         <el-button type="primary" @click="handleAdd">
           <el-icon><Plus /></el-icon>
@@ -50,7 +50,7 @@
         <component :is="Agent" v-if="isShow" :host="currentHost.ip" :token="currentHost.token" :hostname="currentHost.name" :connected-hosts="hostList.filter(h => h.status === 'online')" @close="handleCloseConnection" @switch-host="switchHost"></component>
       </div>
     </div>
-    <el-table :data="hostList" border style="width: 100%; height: 100%">
+    <el-table :data="hostList" border style="width: 100%; height: 100%" v-show="!isShow">
       <el-table-column prop="name" label="主机名称" min-width="180" />
       <el-table-column prop="category" label="分类" min-width="120" />
       <el-table-column prop="ip" label="IP地址" min-width="150" />
@@ -464,18 +464,6 @@ const selectedFolderFiles = ref<File[]>([])
 const folderInput = ref<HTMLInputElement | null>(null)
 
 const handleCloseConnection = () => {
-  const hostManagement = document.querySelector('.host-management .el-table');
-  if (hostManagement) {
-    if (hostManagement instanceof HTMLElement) {
-      hostManagement.style.display = 'block';
-    }
-  }
-  const operationBar = document.querySelector('.host-management .operation-bar');
-  if (operationBar) {
-    if (operationBar instanceof HTMLElement) {
-      operationBar.style.display = 'block';
-    }
-  }
   isShow.value = false;
   currentHost.value = {} as Host;
 };
@@ -907,26 +895,12 @@ const currentHost = ref<Host>({} as Host);
 
 const handleConnect = (host: Host) => {
   const index = hostList.value.findIndex(h => h.id === host.id);
-  axios.get("http://"+host.ip+":5189/metrics", {
+  fetch("http://"+host.ip+":5189/metrics", {
     headers: {'Content-Type': 'application/json'}
   })
   .then(() => {
     host.status = 'online';
     hostList.value[index] = host;
-    // 隐藏host-management元素
-    const hostManagement = document.querySelector('.host-management .el-table');
-    if (hostManagement) {
-      if (hostManagement instanceof HTMLElement) {
-        hostManagement.style.display = 'none';
-      }
-    }
-    const operationBar = document.querySelector('.host-management .operation-bar');
-    if (operationBar) {
-      if (operationBar instanceof HTMLElement) {
-        operationBar.style.display = 'none';
-      }
-    }
-    
     // 设置当前主机并显示Agent组件
     currentHost.value = host;
     isShow.value = true;
